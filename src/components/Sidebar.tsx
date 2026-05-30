@@ -15,7 +15,7 @@ const nav = [
 export default function Sidebar() {
   const path = usePathname()
   return (
-    <aside className="fixed top-0 left-0 h-screen w-60 bg-gray-900 text-white flex flex-col z-50">
+    <aside className="fixed top-0 left-0 h-screen w-60 bg-gray-900 text-white flex flex-col z-50 overflow-hidden">
       <div className="p-5 border-b border-gray-700 flex items-center gap-3">
         <div className="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-sm">DV</div>
         <div>

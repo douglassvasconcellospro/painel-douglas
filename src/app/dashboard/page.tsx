@@ -61,7 +61,7 @@ export default function Dashboard() {
       ) : (
         <>
           {/* KPIs */}
-          <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
             <div className="bg-green-50 border-l-4 border-green-500 rounded-xl p-5">
               <div className="text-xs font-semibold text-gray-500 mb-1">Total de Entradas</div>
               <div className="text-2xl font-bold text-green-700">{fmt(entradas)}</div>
