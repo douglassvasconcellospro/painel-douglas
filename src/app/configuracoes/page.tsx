@@ -18,6 +18,12 @@ export default function Configuracoes() {
   const [salvando, setSalvando] = useState(false)
   const [sucesso, setSucesso] = useState(false)
   const [adminUser, setAdminUser] = useState<{ email?: string } | null>(null)
+  // Trocar senha
+  const [novaSenha, setNovaSenha] = useState('')
+  const [confirmarSenha, setConfirmarSenha] = useState('')
+  const [trocandoSenha, setTrocandoSenha] = useState(false)
+  const [erroSenha, setErroSenha] = useState('')
+  const [sucessoSenha, setSucessoSenha] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -33,6 +39,19 @@ export default function Configuracoes() {
   }
 
   useEffect(() => { load() }, [])
+
+  async function trocarSenha(e: React.FormEvent) {
+    e.preventDefault()
+    setErroSenha('')
+    setSucessoSenha(false)
+    if (novaSenha.length < 6) { setErroSenha('A senha deve ter pelo menos 6 caracteres.'); return }
+    if (novaSenha !== confirmarSenha) { setErroSenha('As senhas não coincidem.'); return }
+    setTrocandoSenha(true)
+    const { error } = await supabase.auth.updateUser({ password: novaSenha })
+    if (error) { setErroSenha('Erro ao atualizar senha. Tente novamente.') }
+    else { setSucessoSenha(true); setNovaSenha(''); setConfirmarSenha(''); setTimeout(() => setSucessoSenha(false), 4000) }
+    setTrocandoSenha(false)
+  }
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault()
@@ -101,9 +120,54 @@ export default function Configuracoes() {
                   <span style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{item.value}</span>
                 </div>
               ))}
-              <div style={{ marginTop: '10px', padding: '10px', background: '#fef3c7', borderRadius: '8px', fontSize: '12px', color: '#92400e' }}>
-                💡 Para alterar sua senha, saia e clique em <strong>"Esqueci minha senha"</strong> no login.
-              </div>
+            </div>
+
+            {/* Trocar senha */}
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+              <h3 style={{ fontWeight: 700, fontSize: '15px', color: '#111827', marginTop: 0, marginBottom: '16px' }}>🔑 Alterar Senha</h3>
+              <form onSubmit={trocarSenha}>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '5px' }}>Nova senha</label>
+                  <input
+                    type="password"
+                    value={novaSenha}
+                    onChange={e => setNovaSenha(e.target.value)}
+                    placeholder="••••••••"
+                    style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: '#fafafa' }}
+                    onFocus={e => (e.target.style.borderColor = '#4f46e5')}
+                    onBlur={e => (e.target.style.borderColor = '#e5e7eb')}
+                  />
+                </div>
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '5px' }}>Confirmar nova senha</label>
+                  <input
+                    type="password"
+                    value={confirmarSenha}
+                    onChange={e => setConfirmarSenha(e.target.value)}
+                    placeholder="••••••••"
+                    style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: '#fafafa' }}
+                    onFocus={e => (e.target.style.borderColor = '#4f46e5')}
+                    onBlur={e => (e.target.style.borderColor = '#e5e7eb')}
+                  />
+                </div>
+                {erroSenha && (
+                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px', fontSize: '13px', color: '#dc2626' }}>
+                    ❌ {erroSenha}
+                  </div>
+                )}
+                {sucessoSenha && (
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px', fontSize: '13px', color: '#15803d' }}>
+                    ✅ Senha alterada com sucesso!
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={trocandoSenha || !novaSenha || !confirmarSenha}
+                  style={{ width: '100%', padding: '11px', background: (trocandoSenha || !novaSenha || !confirmarSenha) ? '#c7d2fe' : '#4f46e5', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: (trocandoSenha || !novaSenha || !confirmarSenha) ? 'not-allowed' : 'pointer' }}
+                >
+                  {trocandoSenha ? '⏳ Salvando...' : '🔐 Salvar nova senha'}
+                </button>
+              </form>
             </div>
 
             {/* Meta mensal */}
