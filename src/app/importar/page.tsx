@@ -205,3 +205,4 @@ export default function Importar() {
     </div>
   )
 }
+export const dynamic = 'force-dynamic'

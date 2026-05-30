@@ -71,3 +71,4 @@ export default function Fechamentos() {
     </div>
   )
 }
+export const dynamic = 'force-dynamic'

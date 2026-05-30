@@ -160,3 +160,4 @@ export default function Dashboard() {
     </div>
   )
 }
+export const dynamic = 'force-dynamic'

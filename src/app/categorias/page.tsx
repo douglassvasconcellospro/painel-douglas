@@ -67,3 +67,4 @@ export default function Categorias() {
     </div>
   )
 }
+export const dynamic = 'force-dynamic'
