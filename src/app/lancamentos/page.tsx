@@ -6,21 +6,26 @@ const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', c
 
 export default function Lancamentos() {
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([])
+  const [categorias, setCategorias] = useState<{ nome: string; tipo: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
   const [filtroTipo, setFiltroTipo] = useState('')
   const [filtroMes, setFiltroMes] = useState('2026-05')
   const [filtroCat, setFiltroCat] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({ tipo: 'entrada', descricao: '', categoria: 'PIX Recebido', data: '', mes: '2026-05', valor: '', banco: 'Manual' })
+  const [form, setForm] = useState({ tipo: 'entrada', descricao: '', categoria: '', data: '', mes: '2026-05', valor: '', banco: 'Manual' })
 
   const meses = ['2026-05','2026-04','2026-03','2026-02','2026-01']
   const nomeMes: Record<string,string> = {'2026-05':'Maio 2026','2026-04':'Abril 2026','2026-03':'Março 2026','2026-02':'Fevereiro 2026','2026-01':'Janeiro 2026'}
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from('lancamentos').select('*').order('data', { ascending: false })
-    setLancamentos(data || [])
+    const [{ data: lancs }, { data: cats }] = await Promise.all([
+      supabase.from('lancamentos').select('*').order('data', { ascending: false }),
+      supabase.from('categorias').select('nome,tipo').order('tipo').order('nome'),
+    ])
+    setLancamentos(lancs || [])
+    setCategorias(cats || [])
     setLoading(false)
   }
 
@@ -35,13 +40,15 @@ export default function Lancamentos() {
 
   async function salvar() {
     if (!form.descricao || !form.valor) return
+    const catPadrao = form.tipo === 'entrada' ? 'PIX Recebido' : 'PIX Enviado'
     await supabase.from('lancamentos').insert([{
-      tipo: form.tipo, descricao: form.descricao, categoria: form.categoria,
+      tipo: form.tipo, descricao: form.descricao,
+      categoria: form.categoria || catPadrao,
       data: form.data || new Date().toLocaleDateString('pt-BR'),
       mes: form.mes, valor: parseFloat(form.valor), banco: form.banco
     }])
     setShowModal(false)
-    setForm({ tipo: 'entrada', descricao: '', categoria: 'PIX Recebido', data: '', mes: '2026-05', valor: '', banco: 'Manual' })
+    setForm({ tipo: 'entrada', descricao: '', categoria: '', data: '', mes: '2026-05', valor: '', banco: 'Manual' })
     load()
   }
 
@@ -51,7 +58,9 @@ export default function Lancamentos() {
     load()
   }
 
-  const cats = ['Mensalidade','Consultoria','PIX Recebido','Receita de Clientes','Rendimentos','Transferência Asaas','Taxas Asaas','PIX Enviado','Investimentos','Fatura do Cartão','Empréstimo','Compras','Logística','Marketplace','Outros (entrada)','Outros (saída)']
+  // Categorias filtradas pelo tipo selecionado no form (do banco de dados)
+  const catsDoTipo = categorias.filter(c => c.tipo === form.tipo).map(c => c.nome)
+  const todasCats = [...new Set(categorias.map(c => c.nome))]
 
   return (
     <div>
@@ -79,7 +88,7 @@ export default function Lancamentos() {
         </select>
         <select value={filtroCat} onChange={e => setFiltroCat(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
           <option value="">Todas as categorias</option>
-          {cats.map(c => <option key={c} value={c}>{c}</option>)}
+          {todasCats.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
 
@@ -154,7 +163,8 @@ export default function Lancamentos() {
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Categoria</label>
                 <select value={form.categoria} onChange={e => setForm({...form, categoria: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
-                  {cats.map(c => <option key={c} value={c}>{c}</option>)}
+                  <option value="">— Selecionar categoria —</option>
+                  {catsDoTipo.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
