@@ -19,6 +19,7 @@ export default function Configuracoes() {
   const [sucesso, setSucesso] = useState(false)
   const [adminUser, setAdminUser] = useState<{ email?: string } | null>(null)
   // Trocar senha
+  const [senhaAtual, setSenhaAtual] = useState('')
   const [novaSenha, setNovaSenha] = useState('')
   const [confirmarSenha, setConfirmarSenha] = useState('')
   const [trocandoSenha, setTrocandoSenha] = useState(false)
@@ -44,12 +45,37 @@ export default function Configuracoes() {
     e.preventDefault()
     setErroSenha('')
     setSucessoSenha(false)
-    if (novaSenha.length < 6) { setErroSenha('A senha deve ter pelo menos 6 caracteres.'); return }
-    if (novaSenha !== confirmarSenha) { setErroSenha('As senhas não coincidem.'); return }
+
+    if (!senhaAtual) { setErroSenha('Digite sua senha atual.'); return }
+    if (novaSenha.length < 6) { setErroSenha('A nova senha deve ter pelo menos 6 caracteres.'); return }
+    if (novaSenha !== confirmarSenha) { setErroSenha('A nova senha e a confirmação não coincidem.'); return }
+    if (senhaAtual === novaSenha) { setErroSenha('A nova senha deve ser diferente da atual.'); return }
+
     setTrocandoSenha(true)
+
+    // Verificar senha atual fazendo login com ela
+    const { error: erroLogin } = await supabase.auth.signInWithPassword({
+      email: adminUser?.email || '',
+      password: senhaAtual,
+    })
+
+    if (erroLogin) {
+      setErroSenha('❌ Senha atual incorreta. Tente novamente.')
+      setTrocandoSenha(false)
+      return
+    }
+
+    // Senha atual correta — atualizar para a nova
     const { error } = await supabase.auth.updateUser({ password: novaSenha })
-    if (error) { setErroSenha('Erro ao atualizar senha. Tente novamente.') }
-    else { setSucessoSenha(true); setNovaSenha(''); setConfirmarSenha(''); setTimeout(() => setSucessoSenha(false), 4000) }
+    if (error) {
+      setErroSenha('Erro ao atualizar senha. Tente novamente.')
+    } else {
+      setSucessoSenha(true)
+      setSenhaAtual('')
+      setNovaSenha('')
+      setConfirmarSenha('')
+      setTimeout(() => setSucessoSenha(false), 4000)
+    }
     setTrocandoSenha(false)
   }
 
@@ -127,6 +153,19 @@ export default function Configuracoes() {
               <h3 style={{ fontWeight: 700, fontSize: '15px', color: '#111827', marginTop: 0, marginBottom: '16px' }}>🔑 Alterar Senha</h3>
               <form onSubmit={trocarSenha}>
                 <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '5px' }}>Senha atual</label>
+                  <input
+                    type="password"
+                    value={senhaAtual}
+                    onChange={e => setSenhaAtual(e.target.value)}
+                    placeholder="••••••••"
+                    style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: '#fafafa' }}
+                    onFocus={e => (e.target.style.borderColor = '#4f46e5')}
+                    onBlur={e => (e.target.style.borderColor = '#e5e7eb')}
+                  />
+                </div>
+                <div style={{ height: '1px', background: '#f3f4f6', margin: '14px 0' }} />
+                <div style={{ marginBottom: '12px' }}>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '5px' }}>Nova senha</label>
                   <input
                     type="password"
@@ -162,8 +201,8 @@ export default function Configuracoes() {
                 )}
                 <button
                   type="submit"
-                  disabled={trocandoSenha || !novaSenha || !confirmarSenha}
-                  style={{ width: '100%', padding: '11px', background: (trocandoSenha || !novaSenha || !confirmarSenha) ? '#c7d2fe' : '#4f46e5', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: (trocandoSenha || !novaSenha || !confirmarSenha) ? 'not-allowed' : 'pointer' }}
+                  disabled={trocandoSenha || !senhaAtual || !novaSenha || !confirmarSenha}
+                  style={{ width: '100%', padding: '11px', background: (trocandoSenha || !senhaAtual || !novaSenha || !confirmarSenha) ? '#c7d2fe' : '#4f46e5', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: (trocandoSenha || !senhaAtual || !novaSenha || !confirmarSenha) ? 'not-allowed' : 'pointer' }}
                 >
                   {trocandoSenha ? '⏳ Salvando...' : '🔐 Salvar nova senha'}
                 </button>
