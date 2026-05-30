@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊' },
@@ -14,6 +15,13 @@ const nav = [
 
 export default function Sidebar() {
   const path = usePathname()
+  const router = useRouter()
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
+  }
 
   return (
     <aside style={{
@@ -88,18 +96,52 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Footer */}
+      {/* Footer com logout */}
       <div style={{
-        padding: '16px',
+        padding: '12px 16px',
         borderTop: '1px solid #374151',
-        fontSize: '11px',
-        color: '#6b7280',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
         flexShrink: 0,
       }}>
-        douglasvasconcellosatleta@gmail.com
+        <div style={{
+          fontSize: '11px',
+          color: '#6b7280',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          marginBottom: '10px',
+        }}>
+          douglasvasconcellosatleta@gmail.com
+        </div>
+        <button
+          onClick={handleLogout}
+          style={{
+            width: '100%',
+            padding: '8px 12px',
+            background: 'transparent',
+            border: '1px solid #374151',
+            borderRadius: '8px',
+            color: '#9ca3af',
+            fontSize: '12px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLButtonElement).style.background = '#dc2626'
+            ;(e.currentTarget as HTMLButtonElement).style.color = '#fff'
+            ;(e.currentTarget as HTMLButtonElement).style.borderColor = '#dc2626'
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLButtonElement).style.background = 'transparent'
+            ;(e.currentTarget as HTMLButtonElement).style.color = '#9ca3af'
+            ;(e.currentTarget as HTMLButtonElement).style.borderColor = '#374151'
+          }}
+        >
+          🚪 Sair do painel
+        </button>
       </div>
     </aside>
   )
