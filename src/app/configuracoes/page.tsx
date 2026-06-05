@@ -12,6 +12,11 @@ const CAMPOS = [
   { key: 'meta_mensal', label: 'Meta de receita mensal (R$)', type: 'number', placeholder: '50000' },
 ]
 
+const CAMPOS_SALDO = [
+  { key: 'saldo_nubank',         label: '🟣 Saldo Nubank (Conta)',     type: 'number', placeholder: '0.00' },
+  { key: 'limite_cartao_nubank', label: '💳 Limite Cartão Nubank',     type: 'number', placeholder: '0.00' },
+]
+
 export default function Configuracoes() {
   const [config, setConfig] = useState<Config>({})
   const [loading, setLoading] = useState(true)
@@ -118,6 +123,20 @@ export default function Configuracoes() {
                 <input type={type} value={config[key] || ''} onChange={e => setConfig({ ...config, [key]: e.target.value })} placeholder={placeholder}
                   style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: '#fafafa' }}
                   onFocus={e => (e.target.style.borderColor = '#4f46e5')}
+                  onBlur={e => (e.target.style.borderColor = '#e5e7eb')} />
+              </div>
+            ))}
+
+            {/* Saldos e Limites Nubank */}
+            <div style={{ height: '1px', background: '#f3f4f6', margin: '20px 0' }} />
+            <h3 style={{ fontWeight: 700, fontSize: '15px', color: '#111827', marginTop: 0, marginBottom: '16px' }}>💳 Saldos & Limites (Nubank)</h3>
+            <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '-10px', marginBottom: '14px' }}>Atualize manualmente quando verificar no app Nubank</p>
+            {CAMPOS_SALDO.map(({ key, label, type, placeholder }) => (
+              <div key={key} style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '5px' }}>{label}</label>
+                <input type={type} value={config[key] || ''} onChange={e => setConfig({ ...config, [key]: e.target.value })} placeholder={placeholder}
+                  style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: '#fafafa' }}
+                  onFocus={e => (e.target.style.borderColor = '#7c3aed')}
                   onBlur={e => (e.target.style.borderColor = '#e5e7eb')} />
               </div>
             ))}

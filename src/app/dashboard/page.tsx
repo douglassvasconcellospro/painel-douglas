@@ -1,295 +1,379 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase, Lancamento } from '@/lib/supabase'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+const fmtK = (v: number) => v >= 1000 ? `R$${(v/1000).toFixed(1)}k` : `R$${v.toFixed(0)}`
+
+const MESES_LISTA = [
+  { v: '2026-06', l: 'Jun 2026' }, { v: '2026-05', l: 'Mai 2026' },
+  { v: '2026-04', l: 'Abr 2026' }, { v: '2026-03', l: 'Mar 2026' },
+  { v: '2026-02', l: 'Fev 2026' }, { v: '2026-01', l: 'Jan 2026' },
+]
+const CORES_PIZZA = ['#4f46e5','#10b981','#f59e0b','#ef4444','#8b5cf6','#0ea5e9','#f97316','#94a3b8']
 
 export default function Dashboard() {
-  const [lancamentos, setLancamentos] = useState<Lancamento[]>([])
   const [mes, setMes] = useState('2026-05')
+  const [lancamentos, setLancamentos] = useState<Lancamento[]>([])
   const [loading, setLoading] = useState(true)
+  const [config, setConfig] = useState<Record<string, string>>({})
+  const [asaas, setAsaas] = useState<any>(null)
+  const [asaasLoading, setAsaasLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const { data } = await supabase.from('lancamentos').select('*').order('data', { ascending: false })
-      setLancamentos(data || [])
+      const [{ data: lancs }, { data: cfgs }] = await Promise.all([
+        supabase.from('lancamentos').select('*').order('data', { ascending: false }),
+        supabase.from('configuracoes').select('chave,valor'),
+      ])
+      setLancamentos(lancs || [])
+      const map: Record<string, string> = {}
+      for (const c of (cfgs || [])) map[c.chave] = c.valor || ''
+      setConfig(map)
       setLoading(false)
     }
     load()
+  }, [])
+
+  useEffect(() => {
+    async function loadAsaas() {
+      setAsaasLoading(true)
+      try {
+        const res = await fetch('/api/asaas/stats')
+        if (res.ok) setAsaas(await res.json())
+      } catch {}
+      setAsaasLoading(false)
+    }
+    loadAsaas()
   }, [])
 
   const doMes = lancamentos.filter(l => l.mes === mes)
   const entradas = doMes.filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0)
   const saidas = doMes.filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0)
   const resultado = entradas - saidas
-  const margem = entradas > 0 ? ((resultado / entradas) * 100).toFixed(1) : '0.0'
+  const margem = entradas > 0 ? ((resultado / entradas) * 100) : 0
+  const meta = parseFloat(config.meta_mensal || '0')
+  const metaPct = meta > 0 ? Math.min((entradas / meta) * 100, 100) : 0
 
-  const meses = [
-    { v: '2026-05', l: 'Maio 2026' }, { v: '2026-04', l: 'Abril 2026' },
-    { v: '2026-03', l: 'Março 2026' }, { v: '2026-02', l: 'Fevereiro 2026' },
-    { v: '2026-01', l: 'Janeiro 2026' },
-  ]
+  // Gráfico 6 meses
+  const dadosMeses = MESES_LISTA.map(m => {
+    const doM = lancamentos.filter(l => l.mes === m.v)
+    return {
+      mes: m.l,
+      entradas: doM.filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0),
+      saidas: doM.filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0),
+    }
+  }).reverse()
 
-  // categorias saida
+  // Pizza categorias saída
   const catSaida: Record<string, number> = {}
   doMes.filter(l => l.tipo === 'saida').forEach(l => {
     catSaida[l.categoria] = (catSaida[l.categoria] || 0) + Number(l.valor)
   })
-  const catSaidaTop = Object.entries(catSaida).sort((a, b) => b[1] - a[1]).slice(0, 6)
+  const pizzaData = Object.entries(catSaida).sort((a,b) => b[1]-a[1]).slice(0,6).map(([name, value]) => ({ name, value }))
 
-  const ultimos = doMes.slice(0, 8)
+  // Saldos e limites
+  const saldoNubank = parseFloat(config.saldo_nubank || '0')
+  const limiteNubank = parseFloat(config.limite_cartao_nubank || '0')
+  const saldoAsaas = asaas?.saldo ?? 0
 
   return (
-    <div>
+    <div style={{ maxWidth: '1400px' }}>
+
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">{meses.find(m => m.v === mes)?.l}</p>
+          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#111827', margin: 0 }}>Dashboard</h1>
+          <p style={{ fontSize: '13px', color: '#9ca3af', marginTop: '2px' }}>{MESES_LISTA.find(m2 => m2.v === mes)?.l}</p>
         </div>
-        <select
-          value={mes} onChange={e => setMes(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white shadow-sm"
-        >
-          {meses.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+        <select value={mes} onChange={e => setMes(e.target.value)}
+          style={{ border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '8px 14px', fontSize: '13px', background: '#fff', fontWeight: 600 }}>
+          {MESES_LISTA.map(m2 => <option key={m2.v} value={m2.v}>{m2.l}</option>)}
         </select>
       </div>
 
-      {loading ? (
-        <div className="text-center py-20 text-gray-400">Carregando dados...</div>
-      ) : (
+      {/* SALDOS E LIMITES — topo */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px', marginBottom: '20px' }}>
+        {/* Saldo Asaas */}
+        <div style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', borderRadius: '14px', padding: '18px', color: '#fff' }}>
+          <div style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, marginBottom: '6px' }}>💰 SALDO ASAAS</div>
+          <div style={{ fontSize: '26px', fontWeight: 800 }}>{asaasLoading ? '...' : fmt(saldoAsaas)}</div>
+          <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px' }}>Carteira disponível</div>
+        </div>
+        {/* Saldo Nubank */}
+        <div style={{ background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', borderRadius: '14px', padding: '18px', color: '#fff' }}>
+          <div style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, marginBottom: '6px' }}>🟣 SALDO NUBANK</div>
+          <div style={{ fontSize: '26px', fontWeight: 800 }}>{fmt(saldoNubank)}</div>
+          <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px' }}>Atualizado em Config.</div>
+        </div>
+        {/* Limite Cartão */}
+        <div style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)', borderRadius: '14px', padding: '18px', color: '#fff' }}>
+          <div style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, marginBottom: '6px' }}>💳 LIMITE CARTÃO</div>
+          <div style={{ fontSize: '26px', fontWeight: 800 }}>{fmt(limiteNubank)}</div>
+          <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px' }}>Limite disponível Nubank</div>
+        </div>
+        {/* Previsão 30 dias */}
+        <div style={{ background: 'linear-gradient(135deg,#d97706,#b45309)', borderRadius: '14px', padding: '18px', color: '#fff' }}>
+          <div style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, marginBottom: '6px' }}>📅 PREVISÃO 30 DIAS</div>
+          <div style={{ fontSize: '26px', fontWeight: 800 }}>{asaasLoading ? '...' : fmt(asaas?.previsao?.dias30 ?? 0)}</div>
+          <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px' }}>{asaas?.previsao?.qtd30 || 0} cobranças pendentes</div>
+        </div>
+      </div>
+
+      {/* KPIs do mês */}
+      {!loading && (
         <>
-          {/* KPIs */}
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-            <div className="bg-green-50 border-l-4 border-green-500 rounded-xl p-5">
-              <div className="text-xs font-semibold text-gray-500 mb-1">Total de Entradas</div>
-              <div className="text-2xl font-bold text-green-700">{fmt(entradas)}</div>
-            </div>
-            <div className="bg-red-50 border-l-4 border-red-500 rounded-xl p-5">
-              <div className="text-xs font-semibold text-gray-500 mb-1">Total de Saídas</div>
-              <div className="text-2xl font-bold text-red-700">{fmt(saidas)}</div>
-            </div>
-            <div className={`${resultado >= 0 ? 'bg-blue-50 border-blue-500' : 'bg-red-50 border-red-500'} border-l-4 rounded-xl p-5`}>
-              <div className="text-xs font-semibold text-gray-500 mb-1">Resultado Líquido</div>
-              <div className={`text-2xl font-bold ${resultado >= 0 ? 'text-blue-700' : 'text-red-700'}`}>{fmt(resultado)}</div>
-            </div>
-            <div className="bg-green-50 border-l-4 border-green-500 rounded-xl p-5">
-              <div className="text-xs font-semibold text-gray-500 mb-1">Margem de Resultado</div>
-              <div className="text-2xl font-bold text-green-700">{margem}%</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '20px' }}>
+            {[
+              { label: 'Total Entradas', val: entradas, cor: '#16a34a', bg: '#f0fdf4', borda: '#16a34a' },
+              { label: 'Total Saídas', val: saidas, cor: '#dc2626', bg: '#fef2f2', borda: '#dc2626' },
+              { label: 'Resultado Líquido', val: resultado, cor: resultado >= 0 ? '#2563eb' : '#dc2626', bg: resultado >= 0 ? '#eff6ff' : '#fef2f2', borda: resultado >= 0 ? '#2563eb' : '#dc2626' },
+              { label: 'MRR Asaas', val: asaas?.mrr ?? 0, cor: '#7c3aed', bg: '#f5f3ff', borda: '#7c3aed' },
+            ].map((k, i) => (
+              <div key={i} style={{ background: k.bg, borderLeft: `4px solid ${k.borda}`, borderRadius: '12px', padding: '16px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>{k.label}</div>
+                <div style={{ fontSize: '22px', fontWeight: 800, color: k.cor }}>{fmt(k.val)}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Meta + Alertas */}
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px', marginBottom: '20px' }}>
+            {/* Meta vs Realizado */}
+            {meta > 0 && (
+              <div style={{ background: '#fff', borderRadius: '14px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827' }}>🎯 Meta vs Realizado</div>
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>{MESES_LISTA.find(m2 => m2.v === mes)?.l}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 800, fontSize: '18px', color: metaPct >= 100 ? '#16a34a' : '#f59e0b' }}>{metaPct.toFixed(0)}%</div>
+                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>{fmt(entradas)} / {fmt(meta)}</div>
+                  </div>
+                </div>
+                <div style={{ height: '12px', background: '#f3f4f6', borderRadius: '99px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${metaPct}%`, background: metaPct >= 100 ? '#16a34a' : metaPct >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '99px', transition: 'width 0.5s' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '12px', color: '#9ca3af' }}>
+                  <span>R$ 0</span>
+                  <span style={{ color: meta - entradas > 0 ? '#ef4444' : '#16a34a', fontWeight: 600 }}>
+                    {meta - entradas > 0 ? `Faltam ${fmt(meta - entradas)}` : `✅ Meta atingida! +${fmt(entradas - meta)}`}
+                  </span>
+                  <span>{fmt(meta)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Alertas */}
+            <div style={{ background: '#fff', borderRadius: '14px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827', marginBottom: '12px' }}>⚠️ Alertas</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(asaas?.qtdVencidas ?? 0) > 0 && (
+                  <div style={{ background: '#fef2f2', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#dc2626', fontWeight: 600 }}>
+                    🔴 {asaas.qtdVencidas} cobrança(s) vencida(s) — {fmt(asaas.totalVencido)}
+                  </div>
+                )}
+                {meta > 0 && metaPct < 70 && (
+                  <div style={{ background: '#fff7ed', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#ea580c', fontWeight: 600 }}>
+                    🟠 Meta em risco — apenas {metaPct.toFixed(0)}% atingido
+                  </div>
+                )}
+                {(asaas?.qtdPendentes ?? 0) > 0 && (
+                  <div style={{ background: '#f0fdf4', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#16a34a', fontWeight: 600 }}>
+                    🟢 {asaas.qtdPendentes} pendente(s) — {fmt(asaas.totalPendente)} a receber
+                  </div>
+                )}
+                {(asaas?.qtdVencidas ?? 0) === 0 && metaPct >= 100 && (
+                  <div style={{ background: '#f0fdf4', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#16a34a', fontWeight: 600 }}>
+                    ✅ Tudo em dia! Meta atingida.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Barra saídas/entradas */}
-          <div className="bg-white rounded-xl p-5 shadow-sm mb-6">
-            <div className="flex justify-between text-sm text-gray-500 mb-2">
-              <span>Saídas vs Entradas</span>
-              <span className="font-medium">{entradas > 0 ? ((saidas / entradas) * 100).toFixed(1) : 0}% comprometido</span>
+          {/* Gráficos */}
+          <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '16px', marginBottom: '20px' }}>
+            {/* Barras 6 meses */}
+            <div style={{ background: '#fff', borderRadius: '14px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827', marginBottom: '16px' }}>📈 Receita vs Despesa — Últimos 6 meses</div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={dadosMeses} barSize={18}>
+                  <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={fmtK} />
+                  <Tooltip formatter={(v: any) => fmt(v)} />
+                  <Bar dataKey="entradas" name="Entradas" fill="#10b981" radius={[4,4,0,0]} />
+                  <Bar dataKey="saidas" name="Saídas" fill="#f87171" radius={[4,4,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-3 rounded-full transition-all"
-                style={{
-                  width: `${Math.min(entradas > 0 ? (saidas / entradas) * 100 : 0, 100)}%`,
-                  background: entradas > 0 && saidas / entradas > 0.9 ? '#ef4444' : entradas > 0 && saidas / entradas > 0.7 ? '#f59e0b' : '#10b981'
-                }}
-              />
-            </div>
-            <div className="flex justify-between text-xs text-gray-400 mt-1">
-              <span>R$ 0,00</span><span>{fmt(entradas)}</span>
+            {/* Pizza categorias */}
+            <div style={{ background: '#fff', borderRadius: '14px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827', marginBottom: '8px' }}>🏷️ Gastos por Categoria</div>
+              {pizzaData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie data={pizzaData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value">
+                      {pizzaData.map((_, i) => <Cell key={i} fill={CORES_PIZZA[i % CORES_PIZZA.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v: any) => fmt(v)} />
+                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '11px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af', fontSize: '13px' }}>Sem dados</div>}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-6 mb-6">
-            {/* Categorias saída */}
-            <div className="bg-white rounded-xl p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">Saídas por Categoria</h3>
-              <div className="space-y-3">
-                {catSaidaTop.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-4">Sem dados</p>
-                ) : catSaidaTop.map(([cat, val]) => (
-                  <div key={cat} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 truncate flex-1">{cat}</span>
-                    <span className="font-semibold text-gray-800 ml-4">{fmt(val)}</span>
+          {/* Asaas: Cobranças + Assinaturas + Previsão */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+
+            {/* Pendentes */}
+            <div style={{ background: '#fff', borderRadius: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+              <div style={{ background: '#fef3c7', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 700, fontSize: '13px', color: '#92400e' }}>⏳ Cobranças Pendentes</span>
+                <span style={{ background: '#f59e0b', color: '#fff', padding: '2px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: 700 }}>{asaas?.qtdPendentes ?? '...'}</span>
+              </div>
+              <div style={{ padding: '0 16px 8px' }}>
+                <div style={{ padding: '10px 0', borderBottom: '1px solid #f3f4f6', fontSize: '20px', fontWeight: 800, color: '#f59e0b' }}>{asaasLoading ? '...' : fmt(asaas?.totalPendente ?? 0)}</div>
+                {(asaas?.pendentes || []).slice(0, 5).map((p: any, i: number) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f9fafb', fontSize: '12px' }}>
+                    <span style={{ color: '#374151', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '8px' }}>{p.cliente?.length > 20 ? p.cliente.slice(0, 20) + '...' : p.cliente}</span>
+                    <span style={{ fontWeight: 700, color: '#f59e0b', whiteSpace: 'nowrap' }}>{fmt(p.valor)}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Últimos lançamentos */}
-            <div className="bg-white rounded-xl p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">Últimos Lançamentos</h3>
-              <div className="space-y-3">
-                {ultimos.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-4">Sem lançamentos</p>
-                ) : ultimos.map(l => (
-                  <div key={l.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="text-base">{l.tipo === 'entrada' ? '⬆️' : '⬇️'}</span>
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-gray-700 truncate">{l.descricao}</div>
-                        <div className="text-xs text-gray-400">{l.data} · {l.categoria}</div>
-                      </div>
+            {/* Vencidas */}
+            <div style={{ background: '#fff', borderRadius: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+              <div style={{ background: '#fef2f2', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 700, fontSize: '13px', color: '#991b1b' }}>🔴 Cobranças Vencidas</span>
+                <span style={{ background: '#ef4444', color: '#fff', padding: '2px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: 700 }}>{asaas?.qtdVencidas ?? '...'}</span>
+              </div>
+              <div style={{ padding: '0 16px 8px' }}>
+                <div style={{ padding: '10px 0', borderBottom: '1px solid #f3f4f6', fontSize: '20px', fontWeight: 800, color: '#ef4444' }}>{asaasLoading ? '...' : fmt(asaas?.totalVencido ?? 0)}</div>
+                {(asaas?.vencidas || []).slice(0, 5).map((p: any, i: number) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f9fafb', fontSize: '12px' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.cliente?.slice(0, 20)}</div>
+                      <div style={{ color: '#ef4444', fontSize: '11px' }}>{p.diasAtraso}d de atraso</div>
                     </div>
-                    <span className={`text-sm font-semibold ml-3 ${l.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}`}>
-                      {l.tipo === 'saida' ? '- ' : '+ '}{fmt(Number(l.valor))}
-                    </span>
+                    <span style={{ fontWeight: 700, color: '#ef4444', whiteSpace: 'nowrap' }}>{fmt(p.valor)}</span>
+                  </div>
+                ))}
+                {(asaas?.qtdVencidas ?? 0) === 0 && !asaasLoading && (
+                  <div style={{ textAlign: 'center', padding: '20px', fontSize: '13px', color: '#16a34a', fontWeight: 600 }}>✅ Nenhuma em atraso!</div>
+                )}
+              </div>
+            </div>
+
+            {/* Assinaturas */}
+            <div style={{ background: '#fff', borderRadius: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+              <div style={{ background: '#ede9fe', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 700, fontSize: '13px', color: '#5b21b6' }}>🔄 Assinaturas Ativas</span>
+                <span style={{ background: '#7c3aed', color: '#fff', padding: '2px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: 700 }}>{asaas?.qtdSubscricoes ?? '...'}</span>
+              </div>
+              <div style={{ padding: '0 16px 8px' }}>
+                <div style={{ padding: '10px 0', borderBottom: '1px solid #f3f4f6' }}>
+                  <div style={{ fontSize: '11px', color: '#9ca3af' }}>MRR (Receita Recorrente)</div>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#7c3aed' }}>{asaasLoading ? '...' : fmt(asaas?.mrr ?? 0)}</div>
+                </div>
+                {(asaas?.subscricoes || []).slice(0, 5).map((s: any, i: number) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f9fafb', fontSize: '12px' }}>
+                    <span style={{ color: '#374151', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '8px' }}>{s.descricao?.slice(0, 22)}</span>
+                    <span style={{ fontWeight: 700, color: '#7c3aed', whiteSpace: 'nowrap' }}>{fmt(s.valor)}</span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Base por banco — entradas e saídas */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '0' }}>
+          {/* Previsão de Caixa + Top Clientes */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px', marginBottom: '20px' }}>
 
-            {/* Nubank */}
-            {(() => {
-              const nb = doMes.filter(l => l.banco === 'Nubank')
-              const ent = nb.filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0)
-              const sai = nb.filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0)
-              const categoriasSaida = nb.filter(l => l.tipo === 'saida').reduce((acc: Record<string,number>, l) => {
-                acc[l.categoria] = (acc[l.categoria] || 0) + Number(l.valor); return acc
-              }, {})
-              const assinaturas = nb.filter(l => l.tipo === 'saida' && (
-                l.categoria === 'Fatura do Cartão' ||
-                l.descricao?.toLowerCase().includes('assinatura') ||
-                l.descricao?.toLowerCase().includes('netflix') ||
-                l.descricao?.toLowerCase().includes('spotify') ||
-                l.descricao?.toLowerCase().includes('amazon') ||
-                l.descricao?.toLowerCase().includes('apple') ||
-                l.descricao?.toLowerCase().includes('google')
-              )).reduce((s, l) => s + Number(l.valor), 0)
-              return nb.length > 0 ? (
-                <div style={{ background: '#fff', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-                  <div style={{ background: 'linear-gradient(135deg,#820ad1,#6c0eb0)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: '36px', height: '36px', background: 'rgba(255,255,255,0.2)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🟣</div>
-                    <div>
-                      <div style={{ color: '#fff', fontWeight: 700, fontSize: '15px' }}>Nubank</div>
-                      <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '12px' }}>{nb.length} lançamentos</div>
-                    </div>
-                  </div>
-                  <div style={{ padding: '16px 20px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-                      <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Entradas</div>
-                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#16a34a' }}>{fmt(ent)}</div>
-                      </div>
-                      <div style={{ background: '#fef2f2', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Saídas</div>
-                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#dc2626' }}>{fmt(sai)}</div>
-                      </div>
-                      <div style={{ background: '#f5f3ff', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Assinaturas</div>
-                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#7c3aed' }}>{fmt(assinaturas)}</div>
-                      </div>
-                    </div>
-                    <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '12px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#6b7280', marginBottom: '8px' }}>GASTOS POR CATEGORIA</div>
-                      {Object.entries(categoriasSaida).sort((a,b) => b[1]-a[1]).slice(0,4).map(([cat, val]) => (
-                        <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '13px', color: '#374151' }}>{cat}</span>
-                          <span style={{ fontSize: '13px', fontWeight: 600, color: '#dc2626' }}>{fmt(val as number)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ marginTop: '12px', background: '#f9fafb', borderRadius: '10px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>Resultado Nubank</span>
-                      <span style={{ fontSize: '14px', fontWeight: 700, color: ent - sai >= 0 ? '#16a34a' : '#dc2626' }}>{fmt(ent - sai)}</span>
-                    </div>
-                  </div>
-                </div>
-              ) : null
-            })()}
-
-            {/* Asaas */}
-            {(() => {
-              const as = doMes.filter(l => l.banco === 'Asaas')
-              const ent = as.filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0)
-              const sai = as.filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0)
-              const categoriasSaida = as.filter(l => l.tipo === 'saida').reduce((acc: Record<string,number>, l) => {
-                acc[l.categoria] = (acc[l.categoria] || 0) + Number(l.valor); return acc
-              }, {})
-              const assinaturas = as.filter(l => l.tipo === 'saida' && l.categoria === 'Taxas Asaas')
-                .reduce((s, l) => s + Number(l.valor), 0)
-              return as.length > 0 ? (
-                <div style={{ background: '#fff', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-                  <div style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: '36px', height: '36px', background: 'rgba(255,255,255,0.2)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🟢</div>
-                    <div>
-                      <div style={{ color: '#fff', fontWeight: 700, fontSize: '15px' }}>Asaas</div>
-                      <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '12px' }}>{as.length} lançamentos</div>
-                    </div>
-                  </div>
-                  <div style={{ padding: '16px 20px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-                      <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Cobranças</div>
-                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#16a34a' }}>{fmt(ent)}</div>
-                      </div>
-                      <div style={{ background: '#fef2f2', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Saídas</div>
-                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#dc2626' }}>{fmt(sai)}</div>
-                      </div>
-                      <div style={{ background: '#fff7ed', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Taxas</div>
-                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#ea580c' }}>{fmt(assinaturas)}</div>
-                      </div>
-                    </div>
-                    <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '12px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#6b7280', marginBottom: '8px' }}>GASTOS POR CATEGORIA</div>
-                      {Object.entries(categoriasSaida).sort((a,b) => b[1]-a[1]).slice(0,4).map(([cat, val]) => (
-                        <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '13px', color: '#374151' }}>{cat}</span>
-                          <span style={{ fontSize: '13px', fontWeight: 600, color: '#dc2626' }}>{fmt(val as number)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ marginTop: '12px', background: '#f9fafb', borderRadius: '10px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>Resultado Asaas</span>
-                      <span style={{ fontSize: '14px', fontWeight: 700, color: ent - sai >= 0 ? '#16a34a' : '#dc2626' }}>{fmt(ent - sai)}</span>
-                    </div>
-                  </div>
-                </div>
-              ) : null
-            })()}
-          </div>
-
-          {/* Total Geral Consolidado */}
-          <div style={{ background: 'linear-gradient(135deg,#1e1b4b,#312e81)', borderRadius: '16px', padding: '24px', marginTop: '20px', color: '#fff' }}>
-            <h3 style={{ fontWeight: 700, fontSize: '16px', margin: '0 0 16px', color: '#e0e7ff' }}>📊 Consolidado Geral — {meses.find(m => m.v === mes)?.l}</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+            {/* Previsão */}
+            <div style={{ background: '#fff', borderRadius: '14px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827', marginBottom: '16px' }}>🔮 Previsão de Caixa</div>
               {[
-                { label: 'Total Entradas', value: entradas, cor: '#4ade80' },
-                { label: 'Total Saídas', value: saidas, cor: '#f87171' },
-                { label: 'Resultado Líquido', value: resultado, cor: resultado >= 0 ? '#60a5fa' : '#f87171' },
-                { label: 'Margem', value: null, margem: margem + '%', cor: parseFloat(margem) >= 20 ? '#4ade80' : parseFloat(margem) >= 0 ? '#fbbf24' : '#f87171' },
-              ].map((item, i) => (
-                <div key={i} style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginBottom: '6px' }}>{item.label}</div>
-                  <div style={{ fontSize: '18px', fontWeight: 800, color: item.cor }}>
-                    {item.value !== null ? fmt(item.value) : item.margem}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginTop: '16px' }}>
-              {['Nubank','Asaas','Manual'].map(banco => {
-                const entBanco = doMes.filter(l => l.banco === banco && l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0)
-                const saiBanco = doMes.filter(l => l.banco === banco && l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0)
-                if (entBanco === 0 && saiBanco === 0) return null
+                { label: '30 dias', val: asaas?.previsao?.dias30 ?? 0, cor: '#16a34a' },
+                { label: '60 dias', val: asaas?.previsao?.dias60 ?? 0, cor: '#2563eb' },
+                { label: '90 dias', val: asaas?.previsao?.dias90 ?? 0, cor: '#7c3aed' },
+              ].map((p, i) => {
+                const max = asaas?.previsao?.dias90 ?? 1
                 return (
-                  <div key={banco} style={{ background: 'rgba(255,255,255,0.07)', borderRadius: '10px', padding: '12px' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'rgba(255,255,255,0.8)', marginBottom: '6px' }}>{banco}</div>
-                    <div style={{ fontSize: '12px', color: '#4ade80' }}>↑ {fmt(entBanco)}</div>
-                    <div style={{ fontSize: '12px', color: '#f87171' }}>↓ {fmt(saiBanco)}</div>
+                  <div key={i} style={{ marginBottom: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>Próximos {p.label}</span>
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: p.cor }}>{asaasLoading ? '...' : fmt(p.val)}</span>
+                    </div>
+                    <div style={{ height: '8px', background: '#f3f4f6', borderRadius: '99px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${max > 0 ? (p.val/max)*100 : 0}%`, background: p.cor, borderRadius: '99px' }} />
+                    </div>
                   </div>
                 )
               })}
+              <div style={{ marginTop: '8px', padding: '10px', background: '#f9fafb', borderRadius: '8px', fontSize: '12px', color: '#6b7280', textAlign: 'center' }}>
+                Baseado nas cobranças pendentes no Asaas
+              </div>
+            </div>
+
+            {/* Top Clientes */}
+            <div style={{ background: '#fff', borderRadius: '14px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827', marginBottom: '16px' }}>🏆 Top Clientes por Receita</div>
+              {asaasLoading ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#9ca3af' }}>Carregando...</div>
+              ) : (
+                <div>
+                  {(asaas?.topClientes || []).map((c: any, i: number) => {
+                    const max = asaas?.topClientes?.[0]?.total ?? 1
+                    return (
+                      <div key={i} style={{ marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#9ca3af', width: '18px' }}>#{i+1}</span>
+                            <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>{c.nome?.slice(0, 30)}</span>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 700, color: '#16a34a' }}>{fmt(c.total)}</span>
+                            <span style={{ fontSize: '11px', color: '#9ca3af', marginLeft: '6px' }}>{c.qtd}x</span>
+                          </div>
+                        </div>
+                        <div style={{ height: '5px', background: '#f3f4f6', borderRadius: '99px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${(c.total/max)*100}%`, background: i === 0 ? '#16a34a' : i === 1 ? '#2563eb' : i === 2 ? '#f59e0b' : '#94a3b8', borderRadius: '99px' }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Consolidado final */}
+          <div style={{ background: 'linear-gradient(135deg,#1e1b4b,#312e81)', borderRadius: '16px', padding: '24px', color: '#fff' }}>
+            <h3 style={{ fontWeight: 700, fontSize: '15px', margin: '0 0 16px', color: '#e0e7ff' }}>📊 Consolidado Geral — {MESES_LISTA.find(m2 => m2.v === mes)?.l}</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '12px' }}>
+              {[
+                { l: 'Entradas', v: fmt(entradas), c: '#4ade80' },
+                { l: 'Saídas', v: fmt(saidas), c: '#f87171' },
+                { l: 'Resultado', v: fmt(resultado), c: resultado >= 0 ? '#60a5fa' : '#f87171' },
+                { l: 'Margem', v: `${margem.toFixed(1)}%`, c: margem >= 20 ? '#4ade80' : margem >= 0 ? '#fbbf24' : '#f87171' },
+                { l: 'MRR', v: asaasLoading ? '...' : fmt(asaas?.mrr ?? 0), c: '#c4b5fd' },
+              ].map((item, i) => (
+                <div key={i} style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '12px', padding: '14px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>{item.l}</div>
+                  <div style={{ fontSize: '16px', fontWeight: 800, color: item.c }}>{item.v}</div>
+                </div>
+              ))}
             </div>
           </div>
         </>
       )}
+
+      {loading && <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af' }}>Carregando dados...</div>}
     </div>
   )
 }
