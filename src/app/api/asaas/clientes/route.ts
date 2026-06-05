@@ -48,7 +48,7 @@ export async function POST() {
 
     // Montar os registros com a classificação correta:
     // - Assinatura ATIVA → status 'ativo'
-    // - Está no Asaas mas sem assinatura ativa → status 'lead' (lead antigo — foi cliente antes)
+    // - Está no Asaas mas sem assinatura ativa → status 'inativo' (lead antigo — foi cliente antes)
     // - origem sempre 'asaas'
     const paraInserir = novos.map((c: any) => {
       const temAssinaturaAtiva = idsAtivos.has(c.id)
@@ -56,7 +56,8 @@ export async function POST() {
         nome: c.name,
         email: c.email || null,
         telefone: c.mobilePhone || c.phone || null,
-        status: temAssinaturaAtiva ? 'ativo' : 'lead',
+        // Assinatura ativa → ativo | Sem assinatura → inativo (mas origem='asaas' = lead antigo)
+        status: temAssinaturaAtiva ? 'ativo' : 'inativo',
         origem: 'asaas',
         plano: temAssinaturaAtiva ? 'Consultoria' : null,
         observacoes: `Importado do Asaas — ID: ${c.id}`,
@@ -72,7 +73,7 @@ export async function POST() {
 
     for (const c of jaExistentesAsaas) {
       const temAssinaturaAtiva = idsAtivos.has(c.id)
-      const novoStatus = temAssinaturaAtiva ? 'ativo' : 'lead'
+      const novoStatus = temAssinaturaAtiva ? 'ativo' : 'inativo'
       const emailLower = c.email?.toLowerCase()
       const nomeLower = c.name?.toLowerCase()
       const existente = (existentes || []).find((e: any) =>
@@ -89,7 +90,7 @@ export async function POST() {
     }
 
     const ativos = paraInserir.filter((c: any) => c.status === 'ativo').length
-    const leadsAntigos = paraInserir.filter((c: any) => c.status === 'lead').length
+    const leadsAntigos = paraInserir.filter((c: any) => c.status === 'inativo').length
 
     return NextResponse.json({
       sincronizados: paraInserir.length,
