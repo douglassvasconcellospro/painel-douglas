@@ -5,58 +5,98 @@ import { supabase } from '@/lib/supabase'
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 
 type Cliente = {
-  id: number
-  nome: string
-  email?: string
-  telefone?: string
-  status: string
-  plano?: string
-  valor_mensalidade?: number
-  data_inicio?: string
-  observacoes?: string
+  id: number; nome: string; email?: string; telefone?: string
+  status: string; origem?: string; plano?: string; valor_mensalidade?: number
+  data_inicio?: string; data_renovacao?: string; modalidade?: string
+  nivel?: string; objetivo?: string; indicado_por?: string
+  historico_pagamento?: string; forma_pagamento?: string; cpf?: string
+  frequencia_semana?: number; observacoes?: string
 }
 
-const statusColor: Record<string, string> = {
-  ativo: 'bg-green-100 text-green-700',
-  inativo: 'bg-gray-100 text-gray-600',
-  lead: 'bg-blue-100 text-blue-700',
-  prospect: 'bg-yellow-100 text-yellow-700',
+const nivelBadge: Record<string, { label: string; bg: string; cor: string }> = {
+  iniciante:    { label: 'Iniciante', bg: '#dcfce7', cor: '#15803d' },
+  intermediario:{ label: 'Intermediário', bg: '#fef9c3', cor: '#92400e' },
+  avancado:     { label: 'Avançado', bg: '#fef2f2', cor: '#dc2626' },
+}
+
+const modalidadeIcon: Record<string, string> = {
+  online: '🌐', presencial: '🏋️', hibrido: '🔀',
+}
+
+const historicoCor: Record<string, string> = {
+  bom: '#16a34a', atrasa: '#f59e0b', problematico: '#dc2626',
+}
+
+const historicoLabel: Record<string, string> = {
+  bom: '✅ Bom pagador', atrasa: '⚠️ Atrasa', problematico: '❌ Problemático',
+}
+
+function CardCliente({ c, onExcluir }: { c: Cliente; onExcluir: (id: number) => void }) {
+  return (
+    <div style={{ background: '#fff', borderRadius: '12px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: '1px solid #f3f4f6' }}>
+      {/* Nome e badges */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nome}</div>
+          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+            {c.modalidade && <span style={{ fontSize: '11px' }}>{modalidadeIcon[c.modalidade] || '?'} {c.modalidade}</span>}
+            {c.nivel && nivelBadge[c.nivel] && (
+              <span style={{ background: nivelBadge[c.nivel].bg, color: nivelBadge[c.nivel].cor, fontSize: '10px', fontWeight: 600, padding: '1px 7px', borderRadius: '99px' }}>
+                {nivelBadge[c.nivel].label}
+              </span>
+            )}
+          </div>
+        </div>
+        {c.valor_mensalidade ? (
+          <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '8px' }}>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: '#16a34a' }}>{fmt(c.valor_mensalidade)}</div>
+            <div style={{ fontSize: '10px', color: '#9ca3af' }}>/ mês</div>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Info */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '10px' }}>
+        {c.email && <div style={{ fontSize: '12px', color: '#6b7280' }}>📧 {c.email}</div>}
+        {c.telefone && <div style={{ fontSize: '12px', color: '#6b7280' }}>📱 {c.telefone}</div>}
+        {c.objetivo && <div style={{ fontSize: '12px', color: '#6b7280' }}>🎯 {c.objetivo}</div>}
+        {c.indicado_por && <div style={{ fontSize: '12px', color: '#6b7280' }}>👤 Indicado por: {c.indicado_por}</div>}
+        {c.frequencia_semana && <div style={{ fontSize: '12px', color: '#6b7280' }}>📅 {c.frequencia_semana}x por semana</div>}
+      </div>
+
+      {/* Footer */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f3f4f6', paddingTop: '8px' }}>
+        {c.historico_pagamento && (
+          <span style={{ fontSize: '11px', fontWeight: 600, color: historicoCor[c.historico_pagamento] || '#6b7280' }}>
+            {historicoLabel[c.historico_pagamento] || c.historico_pagamento}
+          </span>
+        )}
+        {c.origem === 'asaas' && <span style={{ fontSize: '10px', background: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: '99px', fontWeight: 600 }}>Asaas</span>}
+        <button onClick={() => onExcluir(c.id)}
+          style={{ background: 'none', border: 'none', color: '#d1d5db', cursor: 'pointer', fontSize: '12px', marginLeft: 'auto' }}>
+          🗑
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export default function Clientes() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
-  const [filtroStatus, setFiltroStatus] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
   const [form, setForm] = useState({
     nome: '', email: '', telefone: '', cpf: '',
-    status: 'ativo', plano: '', valor_mensalidade: '',
+    status: 'lead', origem: 'manual', plano: '', valor_mensalidade: '',
     data_inicio: '', data_renovacao: '',
     modalidade: 'online', nivel: 'iniciante',
     frequencia_semana: '1', objetivo: '',
     indicado_por: '', historico_pagamento: 'bom',
     forma_pagamento: 'pix', observacoes: '',
   })
-  const [syncLoading, setSyncLoading] = useState(false)
-  const [syncMsg, setSyncMsg] = useState('')
-
-  async function syncAsaas() {
-    setSyncLoading(true)
-    setSyncMsg('')
-    const res = await fetch('/api/asaas/clientes', { method: 'POST' })
-    const data = await res.json()
-    if (data.error) {
-      setSyncMsg(`❌ ${data.error}`)
-    } else if (data.sincronizados === 0) {
-      setSyncMsg(`✅ ${data.mensagem}`)
-    } else {
-      setSyncMsg(`✅ ${data.sincronizados} cliente(s) importados do Asaas! (${data.jaExistiam} já existiam)`)
-      load()
-    }
-    setSyncLoading(false)
-    setTimeout(() => setSyncMsg(''), 5000)
-  }
 
   async function load() {
     setLoading(true)
@@ -67,16 +107,28 @@ export default function Clientes() {
 
   useEffect(() => { load() }, [])
 
-  const filtrados = clientes.filter(c =>
-    (!busca || c.nome.toLowerCase().includes(busca.toLowerCase()) || c.email?.toLowerCase().includes(busca.toLowerCase())) &&
-    (!filtroStatus || c.status === filtroStatus)
-  )
+  async function syncAsaas() {
+    setSyncLoading(true); setSyncMsg('')
+    const res = await fetch('/api/asaas/clientes', { method: 'POST' })
+    const data = await res.json()
+    if (data.error) {
+      setSyncMsg(`❌ ${data.error}`)
+    } else {
+      setSyncMsg(data.sincronizados === 0
+        ? `✅ ${data.mensagem || 'Todos já estão no sistema'}`
+        : `✅ ${data.sincronizados} importados: ${data.ativos} ativos, ${data.leadsAntigos} leads antigos. ${data.atualizados} atualizados.`
+      )
+      load()
+    }
+    setSyncLoading(false)
+    setTimeout(() => setSyncMsg(''), 6000)
+  }
 
   async function salvar() {
     if (!form.nome) return
     await supabase.from('clientes').insert([{
       nome: form.nome, email: form.email || null, telefone: form.telefone || null,
-      cpf: form.cpf || null, status: form.status, plano: form.plano || null,
+      cpf: form.cpf || null, status: form.status, origem: 'manual', plano: form.plano || null,
       valor_mensalidade: form.valor_mensalidade ? parseFloat(form.valor_mensalidade) : null,
       data_inicio: form.data_inicio || null, data_renovacao: form.data_renovacao || null,
       modalidade: form.modalidade, nivel: form.nivel,
@@ -86,7 +138,7 @@ export default function Clientes() {
       observacoes: form.observacoes || null,
     }])
     setShowModal(false)
-    setForm({ nome:'', email:'', telefone:'', cpf:'', status:'ativo', plano:'', valor_mensalidade:'', data_inicio:'', data_renovacao:'', modalidade:'online', nivel:'iniciante', frequencia_semana:'1', objetivo:'', indicado_por:'', historico_pagamento:'bom', forma_pagamento:'pix', observacoes:'' })
+    setForm({ nome:'', email:'', telefone:'', cpf:'', status:'lead', origem:'manual', plano:'', valor_mensalidade:'', data_inicio:'', data_renovacao:'', modalidade:'online', nivel:'iniciante', frequencia_semana:'1', objetivo:'', indicado_por:'', historico_pagamento:'bom', forma_pagamento:'pix', observacoes:'' })
     load()
   }
 
@@ -96,27 +148,35 @@ export default function Clientes() {
     load()
   }
 
-  const totAtivos = clientes.filter(c => c.status === 'ativo').length
-  const totLeads = clientes.filter(c => c.status === 'lead' || c.status === 'prospect').length
-  const mrr = clientes.filter(c => c.status === 'ativo').reduce((s, c) => s + (c.valor_mensalidade || 0), 0)
+  // Classificação dos 3 grupos
+  const filtrar = (lista: Cliente[]) => lista.filter(c =>
+    !busca || c.nome.toLowerCase().includes(busca.toLowerCase()) ||
+    c.email?.toLowerCase().includes(busca.toLowerCase()) ||
+    c.telefone?.includes(busca)
+  )
+
+  const ativos      = filtrar(clientes.filter(c => c.status === 'ativo'))
+  const leadsAntigos= filtrar(clientes.filter(c => c.origem === 'asaas' && c.status !== 'ativo'))
+  const leadsNovos  = filtrar(clientes.filter(c => c.origem !== 'asaas' && c.status !== 'ativo'))
+
+  const mrr = ativos.reduce((s, c) => s + (c.valor_mensalidade || 0), 0)
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Clientes & Leads</h1>
-          <p className="text-sm text-gray-500 mt-1">Gestão completa de clientes</p>
+          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#111827', margin: 0 }}>Clientes & Leads</h1>
+          <p style={{ fontSize: '13px', color: '#9ca3af', marginTop: '3px' }}>Gestão dos seus clientes em 3 grupos</p>
         </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button
-            onClick={syncAsaas}
-            disabled={syncLoading}
-            style={{ background: syncLoading ? '#d1fae5' : '#16a34a', color: '#fff', padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: syncLoading ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            {syncLoading ? '⏳ Importando...' : '🟢 Importar do Asaas'}
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={syncAsaas} disabled={syncLoading}
+            style={{ background: syncLoading ? '#d1fae5' : '#16a34a', color: '#fff', padding: '9px 16px', borderRadius: '9px', border: 'none', cursor: syncLoading ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 600 }}>
+            {syncLoading ? '⏳ Importando...' : '🟢 Sincronizar Asaas'}
           </button>
-          <button onClick={() => setShowModal(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
-            + Novo Cliente
+          <button onClick={() => setShowModal(true)}
+            style={{ background: '#4f46e5', color: '#fff', padding: '9px 16px', borderRadius: '9px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
+            + Lead Novo
           </button>
         </div>
       </div>
@@ -128,199 +188,186 @@ export default function Clientes() {
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-green-50 border-l-4 border-green-500 rounded-xl p-4">
-          <div className="text-xs font-semibold text-gray-500">Clientes Ativos</div>
-          <div className="text-2xl font-bold text-green-700">{totAtivos}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '24px' }}>
+        <div style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a', borderRadius: '12px', padding: '14px 16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Clientes Ativos</div>
+          <div style={{ fontSize: '26px', fontWeight: 800, color: '#16a34a' }}>{ativos.length}</div>
         </div>
-        <div className="bg-blue-50 border-l-4 border-blue-500 rounded-xl p-4">
-          <div className="text-xs font-semibold text-gray-500">Leads/Prospects</div>
-          <div className="text-2xl font-bold text-blue-700">{totLeads}</div>
+        <div style={{ background: '#fef9c3', borderLeft: '4px solid #ca8a04', borderRadius: '12px', padding: '14px 16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Leads Antigos</div>
+          <div style={{ fontSize: '26px', fontWeight: 800, color: '#ca8a04' }}>{leadsAntigos.length}</div>
         </div>
-        <div className="bg-indigo-50 border-l-4 border-indigo-500 rounded-xl p-4">
-          <div className="text-xs font-semibold text-gray-500">MRR (Receita Mensal)</div>
-          <div className="text-2xl font-bold text-indigo-700">{fmt(mrr)}</div>
+        <div style={{ background: '#eff6ff', borderLeft: '4px solid #2563eb', borderRadius: '12px', padding: '14px 16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Leads Novos</div>
+          <div style={{ fontSize: '26px', fontWeight: 800, color: '#2563eb' }}>{leadsNovos.length}</div>
+        </div>
+        <div style={{ background: '#f5f3ff', borderLeft: '4px solid #7c3aed', borderRadius: '12px', padding: '14px 16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>MRR</div>
+          <div style={{ fontSize: '22px', fontWeight: 800, color: '#7c3aed' }}>{fmt(mrr)}</div>
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="flex gap-3 mb-5">
-        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="🔍 Buscar cliente..." className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white flex-1" />
-        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
-          <option value="">Todos os status</option>
-          <option value="ativo">Ativo</option>
-          <option value="inativo">Inativo</option>
-          <option value="lead">Lead</option>
-          <option value="prospect">Prospect</option>
-        </select>
-      </div>
+      {/* Busca */}
+      <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="🔍 Buscar por nome, email ou telefone..."
+        style={{ width: '100%', padding: '10px 16px', border: '1.5px solid #e5e7eb', borderRadius: '10px', fontSize: '14px', outline: 'none', marginBottom: '24px', boxSizing: 'border-box', background: '#fff' }} />
 
-      {/* Tabela */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
-          <thead><tr className="border-b border-gray-100">
-            {['Nome','Email','Telefone','Plano','Mensalidade','Status',''].map(h => (
-              <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
-            ))}
-          </tr></thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={7} className="text-center py-10 text-gray-400">Carregando...</td></tr>
-            ) : filtrados.length === 0 ? (
-              <tr><td colSpan={7} className="text-center py-10 text-gray-400">
-                {clientes.length === 0 ? 'Nenhum cliente cadastrado ainda. Clique em "+ Novo Cliente"!' : 'Nenhum cliente encontrado'}
-              </td></tr>
-            ) : filtrados.map(c => (
-              <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
-                <td className="px-4 py-3 font-medium text-gray-800">{c.nome}</td>
-                <td className="px-4 py-3 text-gray-500">{c.email || '—'}</td>
-                <td className="px-4 py-3 text-gray-500">{c.telefone || '—'}</td>
-                <td className="px-4 py-3 text-gray-500">{c.plano || '—'}</td>
-                <td className="px-4 py-3 font-medium text-gray-700">{c.valor_mensalidade ? fmt(c.valor_mensalidade) : '—'}</td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor[c.status] || 'bg-gray-100 text-gray-600'}`}>
-                    {c.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <button onClick={() => excluir(c.id)} className="text-red-400 hover:text-red-600 text-xs px-2 py-1 rounded hover:bg-red-50">Excluir</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af' }}>Carregando...</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '24px', alignItems: 'start' }}>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-5">
-              <h3 className="text-lg font-bold">Novo Cliente</h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          {/* 🟢 Clientes Ativos */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', padding: '10px 14px', background: '#f0fdf4', borderRadius: '10px', border: '1px solid #bbf7d0' }}>
+              <span style={{ fontSize: '16px' }}>🟢</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '14px', color: '#15803d' }}>Clientes Ativos</div>
+                <div style={{ fontSize: '11px', color: '#6b7280' }}>Pagando agora — assinatura ativa</div>
+              </div>
+              <span style={{ marginLeft: 'auto', background: '#16a34a', color: '#fff', padding: '2px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: 700 }}>{ativos.length}</span>
             </div>
-            <div className="space-y-3">
-              {/* Bloco 1: Identificação */}
-              <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '12px', marginBottom: '4px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '10px' }}>👤 Identificação</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Nome completo *</label>
-                    <input value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Nome completo" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {ativos.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px', color: '#9ca3af', fontSize: '13px', background: '#fff', borderRadius: '10px' }}>Nenhum cliente ativo</div>
+              ) : ativos.map(c => <CardCliente key={c.id} c={c} onExcluir={excluir} />)}
+            </div>
+          </div>
+
+          {/* 🟡 Leads Antigos */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', padding: '10px 14px', background: '#fefce8', borderRadius: '10px', border: '1px solid #fde68a' }}>
+              <span style={{ fontSize: '16px' }}>🟡</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '14px', color: '#92400e' }}>Leads Antigos</div>
+                <div style={{ fontSize: '11px', color: '#6b7280' }}>Foram clientes — histórico no Asaas</div>
+              </div>
+              <span style={{ marginLeft: 'auto', background: '#ca8a04', color: '#fff', padding: '2px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: 700 }}>{leadsAntigos.length}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {leadsAntigos.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px', color: '#9ca3af', fontSize: '13px', background: '#fff', borderRadius: '10px' }}>Clique em "Sincronizar Asaas" para importar</div>
+              ) : leadsAntigos.map(c => <CardCliente key={c.id} c={c} onExcluir={excluir} />)}
+            </div>
+          </div>
+
+          {/* 🔵 Leads Novos */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', padding: '10px 14px', background: '#eff6ff', borderRadius: '10px', border: '1px solid #bfdbfe' }}>
+              <span style={{ fontSize: '16px' }}>🔵</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '14px', color: '#1d4ed8' }}>Leads Novos</div>
+                <div style={{ fontSize: '11px', color: '#6b7280' }}>Prospectos — ainda não são clientes</div>
+              </div>
+              <span style={{ marginLeft: 'auto', background: '#2563eb', color: '#fff', padding: '2px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: 700 }}>{leadsNovos.length}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {leadsNovos.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px', color: '#9ca3af', fontSize: '13px', background: '#fff', borderRadius: '10px' }}>Clique em "+ Lead Novo" para adicionar</div>
+              ) : leadsNovos.map(c => <CardCliente key={c.id} c={c} onExcluir={excluir} />)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Novo Lead */}
+      {showModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}
+          onClick={e => e.target === e.currentTarget && setShowModal(false)}>
+          <div style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '680px', padding: '28px', boxShadow: '0 30px 60px rgba(0,0,0,0.3)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontWeight: 800, fontSize: '18px', margin: 0 }}>🔵 Novo Lead</h3>
+              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#9ca3af' }}>✕</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Bloco 1 */}
+              <div style={{ background: '#f9fafb', borderRadius: '10px', padding: '14px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '12px' }}>👤 Identificação</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ gridColumn: '1/-1' }}>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>Nome completo *</label>
+                    <input value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} placeholder="Nome completo" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Email</label>
-                    <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>Email</label>
+                    <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Telefone / WhatsApp</label>
-                    <input value={form.telefone} onChange={e => setForm({...form, telefone: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="(00) 00000-0000" />
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>Telefone / WhatsApp</label>
+                    <input value={form.telefone} onChange={e => setForm({...form, telefone: e.target.value})} style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} placeholder="(11) 99999-0000" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">CPF</label>
-                    <input value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="000.000.000-00" />
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>Indicado por</label>
+                    <input value={form.indicado_por} onChange={e => setForm({...form, indicado_por: e.target.value})} style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} placeholder="Quem indicou?" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Indicado por</label>
-                    <input value={form.indicado_por} onChange={e => setForm({...form, indicado_por: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Nome de quem indicou" />
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>CPF</label>
+                    <input value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} placeholder="000.000.000-00" />
                   </div>
                 </div>
               </div>
 
-              {/* Bloco 2: Serviço */}
-              <div style={{ background: '#f0fdf4', borderRadius: '8px', padding: '12px', marginBottom: '4px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '10px' }}>💼 Serviço</div>
-                <div className="grid grid-cols-2 gap-3">
+              {/* Bloco 2 */}
+              <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '14px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '12px' }}>💼 Serviço & Plano</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Status</label>
-                    <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
-                      <option value="ativo">✅ Ativo</option>
-                      <option value="inativo">⛔ Inativo</option>
-                      <option value="lead">🔵 Lead</option>
-                      <option value="prospect">🟡 Prospect</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Modalidade</label>
-                    <select value={form.modalidade} onChange={e => setForm({...form, modalidade: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>Modalidade</label>
+                    <select value={form.modalidade} onChange={e => setForm({...form, modalidade: e.target.value})} style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', outline: 'none', background: '#fff', boxSizing: 'border-box' }}>
                       <option value="online">🌐 Online</option>
                       <option value="presencial">🏋️ Presencial</option>
                       <option value="hibrido">🔀 Híbrido</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Plano / Serviço</label>
-                    <input value={form.plano} onChange={e => setForm({...form, plano: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Ex: Consultoria Mensal" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Mensalidade (R$)</label>
-                    <input type="number" value={form.valor_mensalidade} onChange={e => setForm({...form, valor_mensalidade: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="0.00" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Freq. semanal (vezes)</label>
-                    <select value={form.frequencia_semana} onChange={e => setForm({...form, frequencia_semana: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>Frequência semanal</label>
+                    <select value={form.frequencia_semana} onChange={e => setForm({...form, frequencia_semana: e.target.value})} style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', outline: 'none', background: '#fff', boxSizing: 'border-box' }}>
                       {[1,2,3,4,5,6,7].map(n => <option key={n} value={n}>{n}x por semana</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Forma de pagamento</label>
-                    <select value={form.forma_pagamento} onChange={e => setForm({...form, forma_pagamento: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>Plano / Serviço</label>
+                    <input value={form.plano} onChange={e => setForm({...form, plano: e.target.value})} style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} placeholder="Ex: Consultoria Online" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>Mensalidade (R$)</label>
+                    <input type="number" value={form.valor_mensalidade} onChange={e => setForm({...form, valor_mensalidade: e.target.value})} style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} placeholder="0.00" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>Forma de pagamento</label>
+                    <select value={form.forma_pagamento} onChange={e => setForm({...form, forma_pagamento: e.target.value})} style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', outline: 'none', background: '#fff', boxSizing: 'border-box' }}>
                       <option value="pix">PIX</option>
                       <option value="boleto">Boleto</option>
                       <option value="cartao">Cartão</option>
                       <option value="dinheiro">Dinheiro</option>
                     </select>
                   </div>
-                </div>
-              </div>
-
-              {/* Bloco 3: Perfil */}
-              <div style={{ background: '#eff6ff', borderRadius: '8px', padding: '12px', marginBottom: '4px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '10px' }}>🎯 Perfil do Cliente</div>
-                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Nível</label>
-                    <select value={form.nivel} onChange={e => setForm({...form, nivel: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>Nível</label>
+                    <select value={form.nivel} onChange={e => setForm({...form, nivel: e.target.value})} style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', outline: 'none', background: '#fff', boxSizing: 'border-box' }}>
                       <option value="iniciante">🟢 Iniciante</option>
                       <option value="intermediario">🟡 Intermediário</option>
                       <option value="avancado">🔴 Avançado</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Histórico de pagamento</label>
-                    <select value={form.historico_pagamento} onChange={e => setForm({...form, historico_pagamento: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
-                      <option value="bom">✅ Bom pagador</option>
-                      <option value="atrasa">⚠️ Atrasa às vezes</option>
-                      <option value="problematico">❌ Problemático</option>
-                    </select>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Objetivo</label>
-                    <input value={form.objetivo} onChange={e => setForm({...form, objetivo: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Ex: Emagrecimento, Hipertrofia, Saúde, Performance..." />
+                  <div style={{ gridColumn: '1/-1' }}>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>Objetivo</label>
+                    <input value={form.objetivo} onChange={e => setForm({...form, objetivo: e.target.value})} style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} placeholder="Ex: Emagrecimento, Hipertrofia, Condicionamento..." />
                   </div>
                 </div>
               </div>
 
-              {/* Bloco 4: Datas */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Data de início</label>
-                  <input type="date" value={form.data_inicio} onChange={e => setForm({...form, data_inicio: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Data de renovação</label>
-                  <input type="date" value={form.data_renovacao} onChange={e => setForm({...form, data_renovacao: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-                </div>
-              </div>
-
+              {/* Observações */}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Observações</label>
-                <textarea value={form.observacoes} onChange={e => setForm({...form, observacoes: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" rows={2} />
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>Observações</label>
+                <textarea value={form.observacoes} onChange={e => setForm({...form, observacoes: e.target.value})} rows={2}
+                  style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
               </div>
             </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-700 hover:bg-gray-200">Cancelar</button>
-              <button onClick={salvar} className="px-4 py-2 rounded-lg text-sm bg-indigo-600 text-white hover:bg-indigo-700 font-medium">Salvar</button>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button onClick={() => setShowModal(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: '13px' }}>Cancelar</button>
+              <button onClick={salvar} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#4f46e5', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 700 }}>💾 Salvar Lead</button>
             </div>
           </div>
         </div>

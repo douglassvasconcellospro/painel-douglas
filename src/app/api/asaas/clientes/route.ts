@@ -9,29 +9,19 @@ export async function POST() {
   if (!KEY) return NextResponse.json({ error: 'Chave não configurada' }, { status: 500 })
 
   try {
-    // Buscar todos os clientes do Asaas
-    const res = await fetch(`${BASE}/customers?limit=100`, {
-      headers: { 'access_token': KEY },
-      next: { revalidate: 0 },
-    })
-    const data = await res.json()
-    const clientesAsaas = data.data || []
+    // Busca clientes, assinaturas ativas e pagamentos em paralelo
+    const [clientesRes, subscricoesRes] = await Promise.all([
+      fetch(`${BASE}/customers?limit=100`, { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
+      fetch(`${BASE}/subscriptions?status=ACTIVE&limit=100`, { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
+    ])
 
-    // Buscar últimos pagamentos de cada cliente para calcular total pago
-    const pagRes = await fetch(`${BASE}/payments?status=RECEIVED&limit=200`, {
-      headers: { 'access_token': KEY },
-      next: { revalidate: 0 },
-    })
-    const pagData = await pagRes.json()
-    const pagamentos = pagData.data || []
+    const clientesAsaas = (await clientesRes.json()).data || []
+    const subscricoesAtivas = (await subscricoesRes.json()).data || []
 
-    // Mapa de receita por cliente
-    const receitaMap: Record<string, number> = {}
-    for (const p of pagamentos) {
-      receitaMap[p.customer] = (receitaMap[p.customer] || 0) + p.value
-    }
+    // IDs dos clientes que têm assinatura ATIVA agora
+    const idsAtivos = new Set(subscricoesAtivas.map((s: any) => s.customer))
 
-    // Criar Supabase client com sessão do usuário
+    // Supabase com sessão do usuário autenticado
     const cookieStore = await cookies()
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://xveyhffdnlmnhihwbbgh.supabase.co',
@@ -44,41 +34,71 @@ export async function POST() {
       }
     )
 
-    // Verificar quais já existem no Supabase (por email ou nome)
-    const { data: existentes } = await supabase.from('clientes').select('email, nome')
+    // Verificar quais já existem (por email ou nome)
+    const { data: existentes } = await supabase.from('clientes').select('id, email, nome, origem, status')
     const emailsExistentes = new Set((existentes || []).map((c: any) => c.email?.toLowerCase()).filter(Boolean))
     const nomesExistentes = new Set((existentes || []).map((c: any) => c.nome?.toLowerCase()).filter(Boolean))
 
-    // Filtrar novos clientes
+    // Separar novos dos já existentes
     const novos = clientesAsaas.filter((c: any) => {
       const email = c.email?.toLowerCase()
       const nome = c.name?.toLowerCase()
       return !emailsExistentes.has(email) && !nomesExistentes.has(nome)
     })
 
-    if (novos.length === 0) {
-      return NextResponse.json({ sincronizados: 0, mensagem: 'Todos os clientes já estão cadastrados.' })
+    // Montar os registros com a classificação correta:
+    // - Assinatura ATIVA → status 'ativo'
+    // - Está no Asaas mas sem assinatura ativa → status 'lead' (lead antigo — foi cliente antes)
+    // - origem sempre 'asaas'
+    const paraInserir = novos.map((c: any) => {
+      const temAssinaturaAtiva = idsAtivos.has(c.id)
+      return {
+        nome: c.name,
+        email: c.email || null,
+        telefone: c.mobilePhone || c.phone || null,
+        status: temAssinaturaAtiva ? 'ativo' : 'lead',
+        origem: 'asaas',
+        plano: temAssinaturaAtiva ? 'Consultoria' : null,
+        observacoes: `Importado do Asaas — ID: ${c.id}`,
+      }
+    })
+
+    // Também atualizar status dos já existentes que vieram do Asaas
+    // (caso o status da assinatura tenha mudado)
+    const jaExistentesAsaas = clientesAsaas.filter((c: any) => {
+      const email = c.email?.toLowerCase()
+      const nome = c.name?.toLowerCase()
+      return emailsExistentes.has(email) || nomesExistentes.has(nome)
+    })
+
+    for (const c of jaExistentesAsaas) {
+      const temAssinaturaAtiva = idsAtivos.has(c.id)
+      const novoStatus = temAssinaturaAtiva ? 'ativo' : 'lead'
+      const emailLower = c.email?.toLowerCase()
+      const nomeLower = c.name?.toLowerCase()
+      const existente = (existentes || []).find((e: any) =>
+        e.email?.toLowerCase() === emailLower || e.nome?.toLowerCase() === nomeLower
+      )
+      if (existente && (existente.status !== novoStatus || existente.origem !== 'asaas')) {
+        await supabase.from('clientes').update({ status: novoStatus, origem: 'asaas' }).eq('id', existente.id)
+      }
     }
 
-    // Inserir novos clientes
-    const paraInserir = novos.map((c: any) => ({
-      nome: c.name,
-      email: c.email || null,
-      telefone: c.mobilePhone || c.phone || null,
-      status: 'ativo',
-      plano: 'Consultoria',
-      valor_mensalidade: receitaMap[c.id] ? null : null, // será preenchido manualmente
-      observacoes: `Importado do Asaas — ID: ${c.id}`,
-    }))
+    if (paraInserir.length > 0) {
+      const { error } = await supabase.from('clientes').insert(paraInserir)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
-    const { error } = await supabase.from('clientes').insert(paraInserir)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const ativos = paraInserir.filter(c => c.status === 'ativo').length
+    const leadsAntigos = paraInserir.filter(c => c.status === 'lead').length
 
     return NextResponse.json({
-      sincronizados: novos.length,
+      sincronizados: paraInserir.length,
+      ativos,
+      leadsAntigos,
+      atualizados: jaExistentesAsaas.length,
       total: clientesAsaas.length,
-      jaExistiam: clientesAsaas.length - novos.length,
-      clientes: novos.map((c: any) => ({ nome: c.name, email: c.email })),
+      mensagem: paraInserir.length === 0 ? 'Todos os clientes já estão no sistema.' : null,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
