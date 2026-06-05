@@ -39,6 +39,8 @@ export default function Login() {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
     })
+    // Com flowType: 'implicit', o link do email vai direto para /reset-password
+    // com #access_token=xxx&type=recovery na URL — sem precisar de callback server-side
 
     if (error) {
       setError('Erro ao enviar email. Verifique o endereço e tente novamente.')

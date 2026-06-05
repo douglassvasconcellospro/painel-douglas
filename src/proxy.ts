@@ -1,12 +1,13 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/login', '/auth/callback', '/reset-password']
+// Rotas acessíveis sem autenticação
+const PUBLIC_PATHS = ['/login', '/auth', '/reset-password']
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Permite rotas públicas sem autenticação
+  // Libera rotas públicas imediatamente
   if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
     return NextResponse.next({ request })
   }
