@@ -69,10 +69,6 @@ async function fetchTransacoes(dataInicio: string, dataFim: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!ASAAS_KEY) {
-      return NextResponse.json({ error: 'Chave Asaas não configurada' }, { status: 500 })
-    }
-
     const body = await request.json()
     const { dataInicio, dataFim } = body
 

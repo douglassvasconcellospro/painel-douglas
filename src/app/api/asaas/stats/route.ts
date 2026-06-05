@@ -5,8 +5,6 @@ const get    = asaasGet
 const getAll = asaasGetAll
 
 export async function GET() {
-  if (!KEY) return NextResponse.json({ error: 'Chave não configurada' }, { status: 500 })
-
   try {
     const hoje = new Date()
     const em30 = new Date(hoje); em30.setDate(em30.getDate() + 30)
