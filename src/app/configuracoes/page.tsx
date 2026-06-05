@@ -6,14 +6,21 @@ declare global { interface Window { PluggyConnect: any } }
 
 function loadPluggyScript(): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (window.PluggyConnect) { resolve(); return }
-    if (document.getElementById('pluggy-sdk')) { resolve(); return }
-    const s = document.createElement('script')
-    s.id  = 'pluggy-sdk'
-    s.src = 'https://cdn.pluggy.ai/pluggy-connect/v2/pluggy-connect.js'
-    s.onload  = () => resolve()
-    s.onerror = () => reject(new Error('Falha ao carregar Pluggy'))
-    document.head.appendChild(s)
+    // Adiciona o script se ainda não existe
+    if (!document.getElementById('pluggy-sdk')) {
+      const s = document.createElement('script')
+      s.id  = 'pluggy-sdk'
+      s.src = 'https://cdn.pluggy.ai/pluggy-connect/v2/pluggy-connect.js'
+      s.onerror = () => reject(new Error('Falha ao carregar Pluggy'))
+      document.head.appendChild(s)
+    }
+    // Polling até o global estar disponível (até 10s)
+    let attempts = 0
+    const check = setInterval(() => {
+      attempts++
+      if (window.PluggyConnect) { clearInterval(check); resolve() }
+      else if (attempts > 100) { clearInterval(check); reject(new Error('PluggyConnect não disponível')) }
+    }, 100)
   })
 }
 
