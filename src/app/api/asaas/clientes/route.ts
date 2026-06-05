@@ -9,21 +9,27 @@ export async function POST() {
   if (!KEY) return NextResponse.json({ error: 'Chave não configurada' }, { status: 500 })
 
   try {
-    // Busca clientes, assinaturas ativas e cobranças/links pendentes em paralelo
-    const [clientesRes, subscricoesRes, pagamentosRes] = await Promise.all([
-      fetch(`${BASE}/customers?limit=100`, { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
-      fetch(`${BASE}/subscriptions?status=ACTIVE&limit=100`, { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
-      fetch(`${BASE}/payments?status=PENDING&limit=100`, { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
+    // Busca em paralelo: clientes, assinaturas ativas, cobranças pendentes e cobranças vencidas
+    const [clientesRes, subscricoesRes, pendenteRes, vencidaRes] = await Promise.all([
+      fetch(`${BASE}/customers?limit=100`,                            { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
+      fetch(`${BASE}/subscriptions?status=ACTIVE&limit=100`,          { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
+      fetch(`${BASE}/payments?status=PENDING&limit=100`,              { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
+      fetch(`${BASE}/payments?status=OVERDUE&limit=100`,              { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
     ])
 
-    const clientesAsaas       = (await clientesRes.json()).data || []
-    const subscricoesAtivas   = (await subscricoesRes.json()).data || []
-    const pagamentosPendentes = (await pagamentosRes.json()).data || []
+    const clientesAsaas        = (await clientesRes.json()).data || []
+    const subscricoesAtivas    = (await subscricoesRes.json()).data || []
+    const pagamentosPendentes  = (await pendenteRes.json()).data  || []
+    const pagamentosVencidos   = (await vencidaRes.json()).data   || []
 
-    // Ativo = tem assinatura recorrente ativa OU tem cobrança/link pendente a pagar
-    const idsComSubscricao   = new Set(subscricoesAtivas.map((s: any) => s.customer))
-    const idsComPagamento    = new Set(pagamentosPendentes.map((p: any) => p.customer))
-    const idsAtivos          = new Set([...idsComSubscricao, ...idsComPagamento])
+    // Ativo = assinatura recorrente ACTIVE
+    //       OU cobrança/link PENDING (aguardando pagamento)
+    //       OU cobrança OVERDUE (vencida mas ainda em aberto — ainda deve)
+    // Inativo = só tem histórico pago/encerrado, sem nada corrente
+    const idsComSubscricao  = new Set(subscricoesAtivas.map((s: any) => s.customer))
+    const idsComPendente    = new Set(pagamentosPendentes.map((p: any) => p.customer))
+    const idsComVencida     = new Set(pagamentosVencidos.map((p: any) => p.customer))
+    const idsAtivos         = new Set([...idsComSubscricao, ...idsComPendente, ...idsComVencida])
 
     // Supabase com sessão do usuário autenticado
     const cookieStore = await cookies()
@@ -50,9 +56,9 @@ export async function POST() {
       return !emailsExistentes.has(email) && !nomesExistentes.has(nome)
     })
 
-    // Montar os registros com a classificação correta:
-    // - Assinatura ATIVA → status 'ativo'
-    // - Está no Asaas mas sem assinatura ativa → status 'inativo' (lead antigo — foi cliente antes)
+    // Classificação:
+    // - ACTIVE subscription OU PENDING/OVERDUE payment → 'ativo'
+    // - Só histórico pago, sem nada corrente                → 'inativo'
     // - origem sempre 'asaas'
     const paraInserir = novos.map((c: any) => {
       const temAssinaturaAtiva = idsAtivos.has(c.id)
@@ -60,7 +66,6 @@ export async function POST() {
         nome: c.name,
         email: c.email || null,
         telefone: c.mobilePhone || c.phone || null,
-        // Assinatura ativa → ativo | Sem assinatura → inativo (mas origem='asaas' = lead antigo)
         status: temAssinaturaAtiva ? 'ativo' : 'inativo',
         origem: 'asaas',
         plano: temAssinaturaAtiva ? 'Consultoria' : null,
