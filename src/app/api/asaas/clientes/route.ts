@@ -9,17 +9,21 @@ export async function POST() {
   if (!KEY) return NextResponse.json({ error: 'Chave não configurada' }, { status: 500 })
 
   try {
-    // Busca clientes, assinaturas ativas e pagamentos em paralelo
-    const [clientesRes, subscricoesRes] = await Promise.all([
+    // Busca clientes, assinaturas ativas e cobranças/links pendentes em paralelo
+    const [clientesRes, subscricoesRes, pagamentosRes] = await Promise.all([
       fetch(`${BASE}/customers?limit=100`, { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
       fetch(`${BASE}/subscriptions?status=ACTIVE&limit=100`, { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
+      fetch(`${BASE}/payments?status=PENDING&limit=100`, { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
     ])
 
-    const clientesAsaas = (await clientesRes.json()).data || []
-    const subscricoesAtivas = (await subscricoesRes.json()).data || []
+    const clientesAsaas       = (await clientesRes.json()).data || []
+    const subscricoesAtivas   = (await subscricoesRes.json()).data || []
+    const pagamentosPendentes = (await pagamentosRes.json()).data || []
 
-    // IDs dos clientes que têm assinatura ATIVA agora
-    const idsAtivos = new Set(subscricoesAtivas.map((s: any) => s.customer))
+    // Ativo = tem assinatura recorrente ativa OU tem cobrança/link pendente a pagar
+    const idsComSubscricao   = new Set(subscricoesAtivas.map((s: any) => s.customer))
+    const idsComPagamento    = new Set(pagamentosPendentes.map((p: any) => p.customer))
+    const idsAtivos          = new Set([...idsComSubscricao, ...idsComPagamento])
 
     // Supabase com sessão do usuário autenticado
     const cookieStore = await cookies()
