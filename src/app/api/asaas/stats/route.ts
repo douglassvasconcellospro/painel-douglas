@@ -2,13 +2,27 @@ import { NextResponse } from 'next/server'
 
 const BASE = 'https://www.asaas.com/api/v3'
 const KEY = process.env.ASAAS_API_KEY || ''
-
-const headers = { 'access_token': KEY, 'accept': 'application/json' }
+const h = { 'access_token': KEY, 'accept': 'application/json' }
 
 async function get(path: string) {
-  const res = await fetch(`${BASE}${path}`, { headers, next: { revalidate: 0 } })
+  const res = await fetch(`${BASE}${path}`, { headers: h, next: { revalidate: 0 } })
   if (!res.ok) return null
   return res.json()
+}
+
+// Busca todos os registros paginando
+async function getAll(path: string, limit = 100) {
+  const items: any[] = []
+  let offset = 0
+  while (true) {
+    const sep = path.includes('?') ? '&' : '?'
+    const d = await get(`${path}${sep}limit=${limit}&offset=${offset}`)
+    if (!d?.data?.length) break
+    items.push(...d.data)
+    if (!d.hasMore) break
+    offset += limit
+  }
+  return items
 }
 
 export async function GET() {
@@ -22,94 +36,119 @@ export async function GET() {
     const fmt = (d: Date) => d.toISOString().slice(0, 10)
     const iniciomes = fmt(hoje).slice(0, 8) + '01'
 
-    // Tudo em paralelo
+    // Busca tudo em paralelo — incluindo TODOS os clientes
     const [
       balanceData,
-      pendentesData,
-      vencidasData,
-      subscricoesData,
-      recebidosMesData,
-      previsao30Data,
-      previsao60Data,
-      previsao90Data,
-      recebidosTopData,
+      clientesRaw,
+      pendentesRaw,
+      vencidasRaw,
+      subscricoesRaw,
+      recebidosMesRaw,
+      previsao30Raw,
+      previsao60Raw,
+      previsao90Raw,
+      recebidosTopRaw,
     ] = await Promise.all([
       get('/finance/balance'),
-      get(`/payments?status=PENDING&limit=50&offset=0`),
-      get(`/payments?status=OVERDUE&limit=50`),
-      get(`/subscriptions?status=ACTIVE&limit=100`),
-      get(`/payments?status=RECEIVED&paymentDate=${iniciomes}&paymentDateLe=${fmt(hoje)}&limit=100`),
-      get(`/payments?status=PENDING&dueDateGe=${fmt(hoje)}&dueDateLe=${fmt(em30)}&limit=100`),
-      get(`/payments?status=PENDING&dueDateGe=${fmt(hoje)}&dueDateLe=${fmt(em60)}&limit=100`),
-      get(`/payments?status=PENDING&dueDateGe=${fmt(hoje)}&dueDateLe=${fmt(em90)}&limit=100`),
-      get(`/payments?status=RECEIVED&limit=200`),
+      getAll('/customers'),               // todos os 22 clientes
+      getAll('/payments?status=PENDING'),
+      getAll('/payments?status=OVERDUE'),
+      getAll('/subscriptions?status=ACTIVE'),
+      getAll(`/payments?status=RECEIVED&paymentDate=${iniciomes}&paymentDateLe=${fmt(hoje)}`),
+      getAll(`/payments?status=PENDING&dueDateGe=${fmt(hoje)}&dueDateLe=${fmt(em30)}`),
+      getAll(`/payments?status=PENDING&dueDateGe=${fmt(hoje)}&dueDateLe=${fmt(em60)}`),
+      getAll(`/payments?status=PENDING&dueDateGe=${fmt(hoje)}&dueDateLe=${fmt(em90)}`),
+      getAll('/payments?status=RECEIVED'),
     ])
+
+    // Mapa de ID → nome do cliente
+    const clienteMap: Record<string, { nome: string; email: string; telefone: string }> = {}
+    for (const c of clientesRaw) {
+      clienteMap[c.id] = {
+        nome: c.name || 'Desconhecido',
+        email: c.email || '',
+        telefone: c.mobilePhone || c.phone || '',
+      }
+    }
+
+    const nomeCliente = (customerId: string, descricao?: string) =>
+      clienteMap[customerId]?.nome || descricao?.split(' ').slice(0, 3).join(' ') || customerId
 
     // Saldo
     const saldo = balanceData?.balance ?? 0
 
-    // Pendentes
-    const pendentes = (pendentesData?.data || []).map((p: any) => ({
+    // Clientes formatados
+    const clientes = clientesRaw.map((c: any) => ({
+      id: c.id,
+      nome: c.name,
+      email: c.email || '',
+      telefone: c.mobilePhone || c.phone || '',
+    }))
+
+    // Pendentes com nome real
+    const pendentes = pendentesRaw.map((p: any) => ({
       id: p.id,
-      cliente: p.customerName || p.customer,
+      cliente: nomeCliente(p.customer, p.description),
       valor: p.value,
       vencimento: p.dueDate,
       descricao: p.description,
     }))
     const totalPendente = pendentes.reduce((s: number, p: any) => s + p.valor, 0)
 
-    // Vencidas
-    const vencidas = (vencidasData?.data || []).map((p: any) => ({
+    // Vencidas com nome real
+    const vencidas = vencidasRaw.map((p: any) => ({
       id: p.id,
-      cliente: p.customerName || p.customer,
+      cliente: nomeCliente(p.customer, p.description),
       valor: p.value,
       vencimento: p.dueDate,
       diasAtraso: Math.floor((hoje.getTime() - new Date(p.dueDate).getTime()) / 86400000),
     }))
     const totalVencido = vencidas.reduce((s: number, p: any) => s + p.valor, 0)
 
-    // Assinaturas / MRR
-    const subscricoes = (subscricoesData?.data || []).map((s: any) => ({
-      descricao: s.description || 'Sem nome',
+    // Assinaturas com nome real
+    const subscricoes = subscricoesRaw.map((s: any) => ({
+      id: s.id,
+      descricao: s.description || nomeCliente(s.customer),
+      cliente: nomeCliente(s.customer),
       valor: s.value,
-      cliente: s.customerName || s.customer,
     }))
     const mrr = subscricoes.reduce((s: number, a: any) => s + a.valor, 0)
 
     // Recebido este mês
-    const recebidosMes = (recebidosMesData?.data || []).reduce((s: number, p: any) => s + p.value, 0)
+    const recebidosMes = recebidosMesRaw.reduce((s: number, p: any) => s + p.value, 0)
 
-    // Previsão de caixa
+    // Previsão
     const previsao = {
-      dias30: (previsao30Data?.data || []).reduce((s: number, p: any) => s + p.value, 0),
-      dias60: (previsao60Data?.data || []).reduce((s: number, p: any) => s + p.value, 0),
-      dias90: (previsao90Data?.data || []).reduce((s: number, p: any) => s + p.value, 0),
-      qtd30: previsao30Data?.totalCount || 0,
+      dias30: previsao30Raw.reduce((s: number, p: any) => s + p.value, 0),
+      dias60: previsao60Raw.reduce((s: number, p: any) => s + p.value, 0),
+      dias90: previsao90Raw.reduce((s: number, p: any) => s + p.value, 0),
+      qtd30: previsao30Raw.length,
     }
 
-    // Top clientes (por valor total recebido)
-    const clienteMap: Record<string, { nome: string; total: number; qtd: number }> = {}
-    for (const p of (recebidosTopData?.data || [])) {
-      const key = p.customerName || p.customer || 'Desconhecido'
-      if (!clienteMap[key]) clienteMap[key] = { nome: key, total: 0, qtd: 0 }
-      clienteMap[key].total += p.value
-      clienteMap[key].qtd += 1
+    // Top clientes com nomes reais
+    const topMap: Record<string, { nome: string; total: number; qtd: number }> = {}
+    for (const p of recebidosTopRaw) {
+      const nome = nomeCliente(p.customer, p.description)
+      if (!topMap[nome]) topMap[nome] = { nome, total: 0, qtd: 0 }
+      topMap[nome].total += p.value
+      topMap[nome].qtd += 1
     }
-    const topClientes = Object.values(clienteMap)
+    const topClientes = Object.values(topMap)
       .sort((a, b) => b.total - a.total)
       .slice(0, 8)
 
     return NextResponse.json({
       saldo,
+      clientes,
       pendentes,
       totalPendente,
-      qtdPendentes: pendentesData?.totalCount || 0,
+      qtdPendentes: pendentes.length,
       vencidas,
       totalVencido,
-      qtdVencidas: vencidasData?.totalCount || 0,
+      qtdVencidas: vencidas.length,
       subscricoes,
       mrr,
-      qtdSubscricoes: subscricoesData?.totalCount || 0,
+      qtdSubscricoes: subscricoes.length,
       recebidosMes,
       previsao,
       topClientes,

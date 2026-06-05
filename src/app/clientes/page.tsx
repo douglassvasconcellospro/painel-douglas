@@ -30,6 +30,25 @@ export default function Clientes() {
   const [filtroStatus, setFiltroStatus] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({ nome: '', email: '', telefone: '', status: 'ativo', plano: '', valor_mensalidade: '', data_inicio: '', observacoes: '' })
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
+
+  async function syncAsaas() {
+    setSyncLoading(true)
+    setSyncMsg('')
+    const res = await fetch('/api/asaas/clientes', { method: 'POST' })
+    const data = await res.json()
+    if (data.error) {
+      setSyncMsg(`❌ ${data.error}`)
+    } else if (data.sincronizados === 0) {
+      setSyncMsg(`✅ ${data.mensagem}`)
+    } else {
+      setSyncMsg(`✅ ${data.sincronizados} cliente(s) importados do Asaas! (${data.jaExistiam} já existiam)`)
+      load()
+    }
+    setSyncLoading(false)
+    setTimeout(() => setSyncMsg(''), 5000)
+  }
 
   async function load() {
     setLoading(true)
@@ -75,10 +94,25 @@ export default function Clientes() {
           <h1 className="text-2xl font-bold text-gray-900">Clientes & Leads</h1>
           <p className="text-sm text-gray-500 mt-1">Gestão completa de clientes</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
-          + Novo Cliente
-        </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            onClick={syncAsaas}
+            disabled={syncLoading}
+            style={{ background: syncLoading ? '#d1fae5' : '#16a34a', color: '#fff', padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: syncLoading ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            {syncLoading ? '⏳ Importando...' : '🟢 Importar do Asaas'}
+          </button>
+          <button onClick={() => setShowModal(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            + Novo Cliente
+          </button>
+        </div>
       </div>
+
+      {syncMsg && (
+        <div style={{ background: syncMsg.startsWith('❌') ? '#fef2f2' : '#f0fdf4', border: `1px solid ${syncMsg.startsWith('❌') ? '#fecaca' : '#bbf7d0'}`, borderRadius: '8px', padding: '10px 16px', marginBottom: '16px', fontSize: '13px', color: syncMsg.startsWith('❌') ? '#dc2626' : '#15803d', fontWeight: 600 }}>
+          {syncMsg}
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-3 gap-4 mb-6">
