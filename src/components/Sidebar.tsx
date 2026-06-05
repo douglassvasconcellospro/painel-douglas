@@ -4,13 +4,15 @@ import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 const nav = [
-  { href: '/dashboard', label: 'Dashboard', icon: '📊' },
-  { href: '/lancamentos', label: 'Lançamentos', icon: '↕️' },
-  { href: '/importar', label: 'Importar Extrato', icon: '📥' },
-  { href: '/clientes', label: 'Clientes & Leads', icon: '👥' },
-  { href: '/fechamentos', label: 'Fechamentos', icon: '📅' },
-  { href: '/categorias', label: 'Categorias', icon: '🏷️' },
-  { href: '/configuracoes', label: 'Configurações', icon: '⚙️' },
+  { href: '/dashboard',    label: 'Dashboard',        icon: '📊' },
+  { href: '/lancamentos',  label: 'Lançamentos',       icon: '↕️' },
+  { href: '/importar',     label: 'Importar Extrato',  icon: '📥' },
+  { href: '/clientes',     label: 'Clientes & Leads',  icon: '👥' },
+  { href: '/fechamentos',  label: 'Fechamentos',       icon: '📅' },
+  { href: '/dre',          label: 'DRE',               icon: '📋' },
+  { href: '/metas',        label: 'Metas',             icon: '🎯' },
+  { href: '/categorias',   label: 'Categorias',        icon: '🏷️' },
+  { href: '/configuracoes',label: 'Configurações',     icon: '⚙️' },
 ]
 
 export default function Sidebar() {

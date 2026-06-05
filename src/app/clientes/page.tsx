@@ -29,7 +29,15 @@ export default function Clientes() {
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({ nome: '', email: '', telefone: '', status: 'ativo', plano: '', valor_mensalidade: '', data_inicio: '', observacoes: '' })
+  const [form, setForm] = useState({
+    nome: '', email: '', telefone: '', cpf: '',
+    status: 'ativo', plano: '', valor_mensalidade: '',
+    data_inicio: '', data_renovacao: '',
+    modalidade: 'online', nivel: 'iniciante',
+    frequencia_semana: '1', objetivo: '',
+    indicado_por: '', historico_pagamento: 'bom',
+    forma_pagamento: 'pix', observacoes: '',
+  })
   const [syncLoading, setSyncLoading] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
 
@@ -67,13 +75,18 @@ export default function Clientes() {
   async function salvar() {
     if (!form.nome) return
     await supabase.from('clientes').insert([{
-      nome: form.nome, email: form.email, telefone: form.telefone,
-      status: form.status, plano: form.plano,
+      nome: form.nome, email: form.email || null, telefone: form.telefone || null,
+      cpf: form.cpf || null, status: form.status, plano: form.plano || null,
       valor_mensalidade: form.valor_mensalidade ? parseFloat(form.valor_mensalidade) : null,
-      data_inicio: form.data_inicio, observacoes: form.observacoes
+      data_inicio: form.data_inicio || null, data_renovacao: form.data_renovacao || null,
+      modalidade: form.modalidade, nivel: form.nivel,
+      frequencia_semana: parseInt(form.frequencia_semana) || 1,
+      objetivo: form.objetivo || null, indicado_por: form.indicado_por || null,
+      historico_pagamento: form.historico_pagamento, forma_pagamento: form.forma_pagamento,
+      observacoes: form.observacoes || null,
     }])
     setShowModal(false)
-    setForm({ nome: '', email: '', telefone: '', status: 'ativo', plano: '', valor_mensalidade: '', data_inicio: '', observacoes: '' })
+    setForm({ nome:'', email:'', telefone:'', cpf:'', status:'ativo', plano:'', valor_mensalidade:'', data_inicio:'', data_renovacao:'', modalidade:'online', nivel:'iniciante', frequencia_semana:'1', objetivo:'', indicado_por:'', historico_pagamento:'bom', forma_pagamento:'pix', observacoes:'' })
     load()
   }
 
@@ -181,54 +194,128 @@ export default function Clientes() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-lg font-bold">Novo Cliente</h3>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
             </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Nome *</label>
-                <input value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Nome completo" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Email</label>
-                  <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Telefone</label>
-                  <input value={form.telefone} onChange={e => setForm({...form, telefone: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="(00) 00000-0000" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Status</label>
-                  <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
-                    <option value="ativo">Ativo</option>
-                    <option value="inativo">Inativo</option>
-                    <option value="lead">Lead</option>
-                    <option value="prospect">Prospect</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Plano</label>
-                  <input value={form.plano} onChange={e => setForm({...form, plano: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Ex: Presencial, Online..." />
+            <div className="space-y-3">
+              {/* Bloco 1: Identificação */}
+              <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '12px', marginBottom: '4px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '10px' }}>👤 Identificação</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Nome completo *</label>
+                    <input value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Nome completo" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Email</label>
+                    <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Telefone / WhatsApp</label>
+                    <input value={form.telefone} onChange={e => setForm({...form, telefone: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="(00) 00000-0000" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">CPF</label>
+                    <input value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="000.000.000-00" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Indicado por</label>
+                    <input value={form.indicado_por} onChange={e => setForm({...form, indicado_por: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Nome de quem indicou" />
+                  </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Mensalidade (R$)</label>
-                  <input type="number" value={form.valor_mensalidade} onChange={e => setForm({...form, valor_mensalidade: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="0,00" />
+
+              {/* Bloco 2: Serviço */}
+              <div style={{ background: '#f0fdf4', borderRadius: '8px', padding: '12px', marginBottom: '4px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '10px' }}>💼 Serviço</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Status</label>
+                    <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                      <option value="ativo">✅ Ativo</option>
+                      <option value="inativo">⛔ Inativo</option>
+                      <option value="lead">🔵 Lead</option>
+                      <option value="prospect">🟡 Prospect</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Modalidade</label>
+                    <select value={form.modalidade} onChange={e => setForm({...form, modalidade: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                      <option value="online">🌐 Online</option>
+                      <option value="presencial">🏋️ Presencial</option>
+                      <option value="hibrido">🔀 Híbrido</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Plano / Serviço</label>
+                    <input value={form.plano} onChange={e => setForm({...form, plano: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Ex: Consultoria Mensal" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Mensalidade (R$)</label>
+                    <input type="number" value={form.valor_mensalidade} onChange={e => setForm({...form, valor_mensalidade: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="0.00" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Freq. semanal (vezes)</label>
+                    <select value={form.frequencia_semana} onChange={e => setForm({...form, frequencia_semana: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                      {[1,2,3,4,5,6,7].map(n => <option key={n} value={n}>{n}x por semana</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Forma de pagamento</label>
+                    <select value={form.forma_pagamento} onChange={e => setForm({...form, forma_pagamento: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                      <option value="pix">PIX</option>
+                      <option value="boleto">Boleto</option>
+                      <option value="cartao">Cartão</option>
+                      <option value="dinheiro">Dinheiro</option>
+                    </select>
+                  </div>
                 </div>
+              </div>
+
+              {/* Bloco 3: Perfil */}
+              <div style={{ background: '#eff6ff', borderRadius: '8px', padding: '12px', marginBottom: '4px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '10px' }}>🎯 Perfil do Cliente</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Nível</label>
+                    <select value={form.nivel} onChange={e => setForm({...form, nivel: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                      <option value="iniciante">🟢 Iniciante</option>
+                      <option value="intermediario">🟡 Intermediário</option>
+                      <option value="avancado">🔴 Avançado</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Histórico de pagamento</label>
+                    <select value={form.historico_pagamento} onChange={e => setForm({...form, historico_pagamento: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                      <option value="bom">✅ Bom pagador</option>
+                      <option value="atrasa">⚠️ Atrasa às vezes</option>
+                      <option value="problematico">❌ Problemático</option>
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Objetivo</label>
+                    <input value={form.objetivo} onChange={e => setForm({...form, objetivo: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Ex: Emagrecimento, Hipertrofia, Saúde, Performance..." />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloco 4: Datas */}
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Data de início</label>
                   <input type="date" value={form.data_inicio} onChange={e => setForm({...form, data_inicio: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
                 </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Data de renovação</label>
+                  <input type="date" value={form.data_renovacao} onChange={e => setForm({...form, data_renovacao: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                </div>
               </div>
+
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Observações</label>
-                <textarea value={form.observacoes} onChange={e => setForm({...form, observacoes: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" rows={3} />
+                <textarea value={form.observacoes} onChange={e => setForm({...form, observacoes: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" rows={2} />
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">

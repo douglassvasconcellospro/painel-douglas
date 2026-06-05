@@ -16,6 +16,7 @@ const CORES_PIZZA = ['#4f46e5','#10b981','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'
 export default function Dashboard() {
   const [mes, setMes] = useState('2026-05')
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([])
+  const [clientes, setClientes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [config, setConfig] = useState<Record<string, string>>({})
   const [asaas, setAsaas] = useState<any>(null)
@@ -24,11 +25,13 @@ export default function Dashboard() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [{ data: lancs }, { data: cfgs }] = await Promise.all([
+      const [{ data: lancs }, { data: cfgs }, { data: clis }] = await Promise.all([
         supabase.from('lancamentos').select('*').order('data', { ascending: false }),
         supabase.from('configuracoes').select('chave,valor'),
+        supabase.from('clientes').select('*'),
       ])
       setLancamentos(lancs || [])
+      setClientes(clis || [])
       const map: Record<string, string> = {}
       for (const c of (cfgs || [])) map[c.chave] = c.valor || ''
       setConfig(map)
@@ -56,6 +59,23 @@ export default function Dashboard() {
   const margem = entradas > 0 ? ((resultado / entradas) * 100) : 0
   const meta = parseFloat(config.meta_mensal || '0')
   const metaPct = meta > 0 ? Math.min((entradas / meta) * 100, 100) : 0
+
+  // Métricas profissionais
+  const mesAnterior = MESES_LISTA[MESES_LISTA.findIndex(m2 => m2.v === mes) + 1]?.v
+  const entradasMesAnterior = mesAnterior ? lancamentos.filter(l => l.mes === mesAnterior && l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0) : 0
+  const crescimentoMoM = entradasMesAnterior > 0 ? ((entradas - entradasMesAnterior) / entradasMesAnterior) * 100 : 0
+
+  const clientesAtivos = clientes.filter(c => c.status === 'ativo').length
+  const clientesInativos = clientes.filter(c => c.status === 'inativo').length
+  const totalClientesHist = clientesAtivos + clientesInativos
+  const churnRate = totalClientesHist > 0 ? (clientesInativos / totalClientesHist) * 100 : 0
+
+  // Ticket médio = receita ÷ nº pagamentos do mês
+  const qtdPagamentos = doMes.filter(l => l.tipo === 'entrada').length
+  const ticketMedio = qtdPagamentos > 0 ? entradas / qtdPagamentos : 0
+
+  // LTV médio = ticket médio × tempo médio de retenção (estimado em meses ativos)
+  const ltvMedio = ticketMedio * 12 // estimativa conservadora 12 meses
 
   // Gráfico 6 meses
   const dadosMeses = MESES_LISTA.map(m => {
@@ -125,7 +145,8 @@ export default function Dashboard() {
       {/* KPIs do mês */}
       {!loading && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '20px' }}>
+          {/* KPIs principais */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '14px' }}>
             {[
               { label: 'Total Entradas', val: entradas, cor: '#16a34a', bg: '#f0fdf4', borda: '#16a34a' },
               { label: 'Total Saídas', val: saidas, cor: '#dc2626', bg: '#fef2f2', borda: '#dc2626' },
@@ -137,6 +158,34 @@ export default function Dashboard() {
                 <div style={{ fontSize: '22px', fontWeight: 800, color: k.cor }}>{fmt(k.val)}</div>
               </div>
             ))}
+          </div>
+
+          {/* KPIs profissionais */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '20px' }}>
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>📈 Crescimento MoM</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: crescimentoMoM >= 0 ? '#16a34a' : '#dc2626' }}>
+                {crescimentoMoM >= 0 ? '+' : ''}{crescimentoMoM.toFixed(1)}%
+              </div>
+              <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>vs mês anterior</div>
+            </div>
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>🔄 Churn Rate</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: churnRate > 10 ? '#dc2626' : churnRate > 5 ? '#f59e0b' : '#16a34a' }}>
+                {churnRate.toFixed(1)}%
+              </div>
+              <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>{clientesInativos} de {totalClientesHist} clientes</div>
+            </div>
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>🎯 Ticket Médio</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#2563eb' }}>{fmt(ticketMedio)}</div>
+              <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>{qtdPagamentos} pagamentos no mês</div>
+            </div>
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>💎 LTV Médio</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#7c3aed' }}>{fmt(ltvMedio)}</div>
+              <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>estimativa 12 meses</div>
+            </div>
           </div>
 
           {/* Meta + Alertas */}
