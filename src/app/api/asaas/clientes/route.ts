@@ -64,7 +64,6 @@ export async function POST() {
     })
 
     // Também atualizar status dos já existentes que vieram do Asaas
-    // (caso o status da assinatura tenha mudado)
     const jaExistentesAsaas = clientesAsaas.filter((c: any) => {
       const email = c.email?.toLowerCase()
       const nome = c.name?.toLowerCase()
@@ -89,8 +88,8 @@ export async function POST() {
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const ativos = paraInserir.filter(c => c.status === 'ativo').length
-    const leadsAntigos = paraInserir.filter(c => c.status === 'lead').length
+    const ativos = paraInserir.filter((c: any) => c.status === 'ativo').length
+    const leadsAntigos = paraInserir.filter((c: any) => c.status === 'lead').length
 
     return NextResponse.json({
       sincronizados: paraInserir.length,
