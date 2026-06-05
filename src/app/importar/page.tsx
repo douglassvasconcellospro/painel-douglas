@@ -63,6 +63,32 @@ export default function Importar() {
   const [resultado, setResultado] = useState<any>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Sync Asaas
+  const hoje = new Date().toISOString().slice(0, 10)
+  const primeiroDiaMes = new Date().toISOString().slice(0, 8) + '01'
+  const [asaasInicio, setAsaasInicio] = useState(primeiroDiaMes)
+  const [asaasFim, setAsaasFim] = useState(hoje)
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [syncResult, setSyncResult] = useState<any>(null)
+
+  async function sincronizarAsaas() {
+    setSyncLoading(true)
+    setSyncResult(null)
+    try {
+      const res = await fetch('/api/asaas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataInicio: asaasInicio, dataFim: asaasFim }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setSyncResult(data)
+    } catch (e: any) {
+      setSyncResult({ error: e.message })
+    }
+    setSyncLoading(false)
+  }
+
   async function importar() {
     if (!arquivo) return
     setLoading(true)
@@ -120,7 +146,54 @@ export default function Importar() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Importar Extrato</h1>
-        <p className="text-sm text-gray-500 mt-1">Importe extratos Nubank (.ofx) ou Asaas (.xlsx) — categorização automática</p>
+        <p className="text-sm text-gray-500 mt-1">Sincronize o Asaas automaticamente ou importe arquivos Nubank (.ofx)</p>
+      </div>
+
+      {/* Card de Sincronização Automática Asaas */}
+      <div style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', borderRadius: '16px', padding: '24px', marginBottom: '24px', color: '#fff' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <span style={{ fontSize: '24px' }}>🟢</span>
+              <h3 style={{ fontWeight: 700, fontSize: '18px', margin: 0 }}>Sincronização Automática — Asaas</h3>
+              <span style={{ background: 'rgba(255,255,255,0.25)', padding: '2px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: 600 }}>✅ CONECTADO</span>
+            </div>
+            <p style={{ fontSize: '13px', opacity: 0.85, margin: 0 }}>Busca todos os lançamentos direto da API Asaas • somente leitura • sem transferências</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: '11px', opacity: 0.7, marginBottom: '3px' }}>De</div>
+              <input type="date" value={asaasInicio} onChange={e => setAsaasInicio(e.target.value)}
+                style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', fontSize: '13px', background: 'rgba(255,255,255,0.2)', color: '#fff', outline: 'none' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', opacity: 0.7, marginBottom: '3px' }}>Até</div>
+              <input type="date" value={asaasFim} onChange={e => setAsaasFim(e.target.value)}
+                style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', fontSize: '13px', background: 'rgba(255,255,255,0.2)', color: '#fff', outline: 'none' }} />
+            </div>
+            <div style={{ marginTop: '16px' }}>
+              <button onClick={sincronizarAsaas} disabled={syncLoading}
+                style={{ padding: '10px 22px', background: '#fff', color: '#15803d', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '14px', cursor: syncLoading ? 'not-allowed' : 'pointer', opacity: syncLoading ? 0.7 : 1 }}>
+                {syncLoading ? '⏳ Buscando...' : '🔄 Sincronizar'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Resultado da sincronização */}
+        {syncResult && !syncResult.error && (
+          <div style={{ marginTop: '16px', background: 'rgba(255,255,255,0.15)', borderRadius: '10px', padding: '14px', display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            <div><div style={{ fontSize: '11px', opacity: 0.8 }}>Importados</div><div style={{ fontSize: '22px', fontWeight: 800 }}>{syncResult.importados}</div></div>
+            <div><div style={{ fontSize: '11px', opacity: 0.8 }}>Entradas ({syncResult.entradas})</div><div style={{ fontSize: '16px', fontWeight: 700 }}>{new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(syncResult.totalEntradas)}</div></div>
+            <div><div style={{ fontSize: '11px', opacity: 0.8 }}>Saídas ({syncResult.saidas})</div><div style={{ fontSize: '16px', fontWeight: 700 }}>{new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(syncResult.totalSaidas)}</div></div>
+            <div><div style={{ fontSize: '11px', opacity: 0.8 }}>Período</div><div style={{ fontSize: '13px', fontWeight: 600 }}>{syncResult.periodo}</div></div>
+          </div>
+        )}
+        {syncResult?.error && (
+          <div style={{ marginTop: '12px', background: 'rgba(239,68,68,0.3)', borderRadius: '8px', padding: '10px 14px', fontSize: '13px' }}>
+            ❌ {syncResult.error}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-6">
