@@ -225,11 +225,12 @@ export default function Clientes() {
     c.telefone?.includes(busca)
   )
 
-  const ativos       = filtrar(clientes.filter(c => c.status === 'ativo'))
-  const leadsAntigos = filtrar(clientes.filter(c => c.origem === 'asaas' && c.status !== 'ativo'))
-  const leadsNovos   = filtrar(clientes.filter(c => c.origem !== 'asaas' && c.status !== 'ativo'))
+  const ativos    = filtrar(clientes.filter(c => c.status === 'ativo'))
+  const inativos  = filtrar(clientes.filter(c => c.status === 'inativo'))
+  const leadsNovos= filtrar(clientes.filter(c => c.status !== 'ativo' && c.status !== 'inativo'))
 
   const mrr = ativos.reduce((s, c) => s + (c.valor_mensalidade || 0), 0)
+  const mrrPerdido = inativos.reduce((s, c) => s + (c.valor_mensalidade || 0), 0)
 
   const colHeader = (emoji: string, titulo: string, desc: string, count: number, bg: string, border: string, cor: string, corBadge: string) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', padding: '10px 14px', background: bg, borderRadius: '10px', border: `1px solid ${border}` }}>
@@ -274,9 +275,10 @@ export default function Clientes() {
           <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Clientes Ativos</div>
           <div style={{ fontSize: '26px', fontWeight: 800, color: '#16a34a' }}>{ativos.length}</div>
         </div>
-        <div style={{ background: '#fef9c3', borderLeft: '4px solid #ca8a04', borderRadius: '12px', padding: '14px 16px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Leads Antigos</div>
-          <div style={{ fontSize: '26px', fontWeight: 800, color: '#ca8a04' }}>{leadsAntigos.length}</div>
+        <div style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '12px', padding: '14px 16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Clientes Inativos</div>
+          <div style={{ fontSize: '26px', fontWeight: 800, color: '#dc2626' }}>{inativos.length}</div>
+          {mrrPerdido > 0 && <div style={{ fontSize: '11px', color: '#dc2626', marginTop: '2px' }}>- {fmt(mrrPerdido)}/mês</div>}
         </div>
         <div style={{ background: '#eff6ff', borderLeft: '4px solid #2563eb', borderRadius: '12px', padding: '14px 16px' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Leads Novos</div>
@@ -307,13 +309,13 @@ export default function Clientes() {
             </div>
           </div>
 
-          {/* 🟡 Leads Antigos */}
+          {/* 🔴 Clientes Inativos */}
           <div>
-            {colHeader('🟡', 'Leads Antigos', 'Sem assinatura ativa — histórico Asaas', leadsAntigos.length, '#fefce8', '#fde68a', '#92400e', '#ca8a04')}
+            {colHeader('🔴', 'Clientes Inativos', 'Sem cobrança ativa nem assinatura recorrente', inativos.length, '#fef2f2', '#fecaca', '#b91c1c', '#dc2626')}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {leadsAntigos.length === 0
-                ? <div style={{ textAlign: 'center', padding: '30px', color: '#9ca3af', fontSize: '13px', background: '#fff', borderRadius: '10px' }}>Clique em "Sincronizar Asaas" para importar</div>
-                : leadsAntigos.map(c => <CardCliente key={c.id} c={c} onEditar={abrirEditar} onExcluir={excluir} />)}
+              {inativos.length === 0
+                ? <div style={{ textAlign: 'center', padding: '30px', color: '#9ca3af', fontSize: '13px', background: '#fff', borderRadius: '10px' }}>Nenhum cliente inativo. Sincronize o Asaas para atualizar.</div>
+                : inativos.map(c => <CardCliente key={c.id} c={c} onEditar={abrirEditar} onExcluir={excluir} />)}
             </div>
           </div>
 
