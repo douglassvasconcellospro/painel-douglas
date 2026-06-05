@@ -140,18 +140,151 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Total por banco */}
-          <div className="bg-white rounded-xl p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Entradas por Banco — {meses.find(m => m.v === mes)?.l}</h3>
-            <div className="grid grid-cols-3 gap-4">
-              {['Nubank','Asaas','Manual'].map(banco => {
-                const total = doMes.filter(l => l.banco === banco && l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0)
-                return total > 0 ? (
-                  <div key={banco} className="bg-gray-50 rounded-lg p-4 text-center">
-                    <div className="text-xs text-gray-500 mb-1">{banco}</div>
-                    <div className="text-lg font-bold text-gray-800">{fmt(total)}</div>
+          {/* Base por banco — entradas e saídas */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '0' }}>
+
+            {/* Nubank */}
+            {(() => {
+              const nb = doMes.filter(l => l.banco === 'Nubank')
+              const ent = nb.filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0)
+              const sai = nb.filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0)
+              const categoriasSaida = nb.filter(l => l.tipo === 'saida').reduce((acc: Record<string,number>, l) => {
+                acc[l.categoria] = (acc[l.categoria] || 0) + Number(l.valor); return acc
+              }, {})
+              const assinaturas = nb.filter(l => l.tipo === 'saida' && (
+                l.categoria === 'Fatura do Cartão' ||
+                l.descricao?.toLowerCase().includes('assinatura') ||
+                l.descricao?.toLowerCase().includes('netflix') ||
+                l.descricao?.toLowerCase().includes('spotify') ||
+                l.descricao?.toLowerCase().includes('amazon') ||
+                l.descricao?.toLowerCase().includes('apple') ||
+                l.descricao?.toLowerCase().includes('google')
+              )).reduce((s, l) => s + Number(l.valor), 0)
+              return nb.length > 0 ? (
+                <div style={{ background: '#fff', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+                  <div style={{ background: 'linear-gradient(135deg,#820ad1,#6c0eb0)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '36px', height: '36px', background: 'rgba(255,255,255,0.2)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🟣</div>
+                    <div>
+                      <div style={{ color: '#fff', fontWeight: 700, fontSize: '15px' }}>Nubank</div>
+                      <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '12px' }}>{nb.length} lançamentos</div>
+                    </div>
                   </div>
-                ) : null
+                  <div style={{ padding: '16px 20px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                      <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Entradas</div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#16a34a' }}>{fmt(ent)}</div>
+                      </div>
+                      <div style={{ background: '#fef2f2', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Saídas</div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#dc2626' }}>{fmt(sai)}</div>
+                      </div>
+                      <div style={{ background: '#f5f3ff', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Assinaturas</div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#7c3aed' }}>{fmt(assinaturas)}</div>
+                      </div>
+                    </div>
+                    <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '12px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#6b7280', marginBottom: '8px' }}>GASTOS POR CATEGORIA</div>
+                      {Object.entries(categoriasSaida).sort((a,b) => b[1]-a[1]).slice(0,4).map(([cat, val]) => (
+                        <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '13px', color: '#374151' }}>{cat}</span>
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: '#dc2626' }}>{fmt(val as number)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: '12px', background: '#f9fafb', borderRadius: '10px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>Resultado Nubank</span>
+                      <span style={{ fontSize: '14px', fontWeight: 700, color: ent - sai >= 0 ? '#16a34a' : '#dc2626' }}>{fmt(ent - sai)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : null
+            })()}
+
+            {/* Asaas */}
+            {(() => {
+              const as = doMes.filter(l => l.banco === 'Asaas')
+              const ent = as.filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0)
+              const sai = as.filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0)
+              const categoriasSaida = as.filter(l => l.tipo === 'saida').reduce((acc: Record<string,number>, l) => {
+                acc[l.categoria] = (acc[l.categoria] || 0) + Number(l.valor); return acc
+              }, {})
+              const assinaturas = as.filter(l => l.tipo === 'saida' && l.categoria === 'Taxas Asaas')
+                .reduce((s, l) => s + Number(l.valor), 0)
+              return as.length > 0 ? (
+                <div style={{ background: '#fff', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+                  <div style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '36px', height: '36px', background: 'rgba(255,255,255,0.2)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🟢</div>
+                    <div>
+                      <div style={{ color: '#fff', fontWeight: 700, fontSize: '15px' }}>Asaas</div>
+                      <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '12px' }}>{as.length} lançamentos</div>
+                    </div>
+                  </div>
+                  <div style={{ padding: '16px 20px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                      <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Cobranças</div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#16a34a' }}>{fmt(ent)}</div>
+                      </div>
+                      <div style={{ background: '#fef2f2', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Saídas</div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#dc2626' }}>{fmt(sai)}</div>
+                      </div>
+                      <div style={{ background: '#fff7ed', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>Taxas</div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#ea580c' }}>{fmt(assinaturas)}</div>
+                      </div>
+                    </div>
+                    <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '12px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#6b7280', marginBottom: '8px' }}>GASTOS POR CATEGORIA</div>
+                      {Object.entries(categoriasSaida).sort((a,b) => b[1]-a[1]).slice(0,4).map(([cat, val]) => (
+                        <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '13px', color: '#374151' }}>{cat}</span>
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: '#dc2626' }}>{fmt(val as number)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: '12px', background: '#f9fafb', borderRadius: '10px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>Resultado Asaas</span>
+                      <span style={{ fontSize: '14px', fontWeight: 700, color: ent - sai >= 0 ? '#16a34a' : '#dc2626' }}>{fmt(ent - sai)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : null
+            })()}
+          </div>
+
+          {/* Total Geral Consolidado */}
+          <div style={{ background: 'linear-gradient(135deg,#1e1b4b,#312e81)', borderRadius: '16px', padding: '24px', marginTop: '20px', color: '#fff' }}>
+            <h3 style={{ fontWeight: 700, fontSize: '16px', margin: '0 0 16px', color: '#e0e7ff' }}>📊 Consolidado Geral — {meses.find(m => m.v === mes)?.l}</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+              {[
+                { label: 'Total Entradas', value: entradas, cor: '#4ade80' },
+                { label: 'Total Saídas', value: saidas, cor: '#f87171' },
+                { label: 'Resultado Líquido', value: resultado, cor: resultado >= 0 ? '#60a5fa' : '#f87171' },
+                { label: 'Margem', value: null, margem: margem + '%', cor: parseFloat(margem) >= 20 ? '#4ade80' : parseFloat(margem) >= 0 ? '#fbbf24' : '#f87171' },
+              ].map((item, i) => (
+                <div key={i} style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginBottom: '6px' }}>{item.label}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 800, color: item.cor }}>
+                    {item.value !== null ? fmt(item.value) : item.margem}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginTop: '16px' }}>
+              {['Nubank','Asaas','Manual'].map(banco => {
+                const entBanco = doMes.filter(l => l.banco === banco && l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0)
+                const saiBanco = doMes.filter(l => l.banco === banco && l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0)
+                if (entBanco === 0 && saiBanco === 0) return null
+                return (
+                  <div key={banco} style={{ background: 'rgba(255,255,255,0.07)', borderRadius: '10px', padding: '12px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'rgba(255,255,255,0.8)', marginBottom: '6px' }}>{banco}</div>
+                    <div style={{ fontSize: '12px', color: '#4ade80' }}>↑ {fmt(entBanco)}</div>
+                    <div style={{ fontSize: '12px', color: '#f87171' }}>↓ {fmt(saiBanco)}</div>
+                  </div>
+                )
               })}
             </div>
           </div>

@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
 const ASAAS_BASE = 'https://www.asaas.com/api/v3'
 const ASAAS_KEY = process.env.ASAAS_API_KEY || ''
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://xveyhffdnlmnhihwbbgh.supabase.co',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2ZXloZmZkbmxtbmhpaHdiYmdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxMTU3NTAsImV4cCI6MjA5NTY5MTc1MH0.EvjxqX685tFbk2-1xwa3K4BgoUIJ_-x5cQbr8a0_Kxc'
-)
+async function getSupabase() {
+  const cookieStore = await cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://xveyhffdnlmnhihwbbgh.supabase.co',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2ZXloZmZkbmxtbmhpaHdiYmdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxMTU3NTAsImV4cCI6MjA5NTY5MTc1MH0.EvjxqX685tFbk2-1xwa3K4BgoUIJ_-x5cQbr8a0_Kxc',
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
+        },
+      },
+    }
+  )
+}
 
 // Mapeamento de tipos → categoria e tipo financeiro (somente leitura)
 function categorizar(type: string, value: number, description: string) {
@@ -113,7 +125,8 @@ export async function POST(request: NextRequest) {
     // Salvar no Supabase (sem asaas_id pois não existe na tabela)
     const paraInserir = novos.map(({ asaas_id, ...l }) => l)
 
-    const { error, count } = await supabaseAdmin
+    const supabase = await getSupabase()
+    const { error } = await supabase
       .from('lancamentos')
       .insert(paraInserir)
 
