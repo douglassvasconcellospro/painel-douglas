@@ -13,16 +13,31 @@ export default function ResetPassword() {
   const router = useRouter()
 
   useEffect(() => {
-    // Supabase detecta token do email na URL e dispara PASSWORD_RECOVERY
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY') setReady(true)
-      if (event === 'SIGNED_IN' && session) setReady(true)
-    })
-    // Se já tem sessão ativa (veio pelo callback), libera direto
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    async function init() {
+      // 1) Trata ?code=xxx (PKCE flow — link antigo do email)
+      const params = new URLSearchParams(window.location.search)
+      const code = params.get('code')
+      if (code) {
+        const { error: exchErr } = await supabase.auth.exchangeCodeForSession(code)
+        if (!exchErr) { setReady(true); return }
+        // Código inválido/expirado — mostra erro direto
+        setError('Este link expirou ou já foi usado. Solicite um novo.')
+        return
+      }
+
+      // 2) Trata #access_token=xxx&type=recovery (implicit flow — link novo)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'PASSWORD_RECOVERY') setReady(true)
+        if (event === 'SIGNED_IN' && session) setReady(true)
+      })
+
+      // 3) Sessão já ativa (chegou via callback server-side)
+      const { data: { session } } = await supabase.auth.getSession()
       if (session) setReady(true)
-    })
-    return () => subscription.unsubscribe()
+
+      return () => subscription.unsubscribe()
+    }
+    init()
   }, [])
 
   async function handleReset(e: React.FormEvent) {
@@ -63,16 +78,22 @@ export default function ResetPassword() {
           </div>
         )}
 
-        {!success && !ready && (
+        {!success && !ready && !error && (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: '48px', marginBottom: '20px' }}>⏳</div>
             <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#374151', margin: '0 0 12px' }}>Verificando link...</h2>
-            <p style={{ fontSize: '13px', color: '#9ca3af' }}>
-              Se demorar muito, o link expirou.{' '}
-              <button onClick={() => router.push('/login')} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', textDecoration: 'underline', fontSize: '13px' }}>
-                Solicitar novo link
-              </button>
-            </p>
+          </div>
+        )}
+
+        {!success && !ready && error && (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+            <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#374151', margin: '0 0 10px' }}>Link inválido ou expirado</h2>
+            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '20px' }}>{error}</p>
+            <button onClick={() => router.push('/login')}
+              style={{ background: 'linear-gradient(135deg,#4f46e5,#7c3aed)', color: '#fff', border: 'none', borderRadius: '10px', padding: '12px 24px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+              ← Solicitar novo link
+            </button>
           </div>
         )}
 
