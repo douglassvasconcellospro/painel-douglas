@@ -2,6 +2,21 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
+declare global { interface Window { PluggyConnect: any } }
+
+function loadPluggyScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.PluggyConnect) { resolve(); return }
+    if (document.getElementById('pluggy-sdk')) { resolve(); return }
+    const s = document.createElement('script')
+    s.id  = 'pluggy-sdk'
+    s.src = 'https://cdn.pluggy.ai/pluggy-connect/v2/pluggy-connect.js'
+    s.onload  = () => resolve()
+    s.onerror = () => reject(new Error('Falha ao carregar Pluggy'))
+    document.head.appendChild(s)
+  })
+}
+
 type Config = Record<string, string>
 
 const CAMPOS = [
@@ -20,9 +35,11 @@ const CAMPOS_SALDO = [
 export default function Configuracoes() {
   const [config, setConfig] = useState<Config>({})
   const [loading, setLoading] = useState(true)
-  const [salvando, setSalvando] = useState(false)
-  const [sucesso, setSucesso] = useState(false)
-  const [adminUser, setAdminUser] = useState<{ email?: string } | null>(null)
+  const [salvando, setSalvando]       = useState(false)
+  const [sucesso, setSucesso]         = useState(false)
+  const [adminUser, setAdminUser]     = useState<{ email?: string } | null>(null)
+  const [pluggyStatus, setPluggyStatus] = useState<'idle'|'loading'|'ok'|'error'>('idle')
+  const [pluggyMsg, setPluggyMsg]     = useState('')
   // Trocar senha
   const [senhaAtual, setSenhaAtual] = useState('')
   const [novaSenha, setNovaSenha] = useState('')
@@ -82,6 +99,43 @@ export default function Configuracoes() {
       setTimeout(() => setSucessoSenha(false), 4000)
     }
     setTrocandoSenha(false)
+  }
+
+  async function conectarPluggy() {
+    setPluggyStatus('loading'); setPluggyMsg('')
+    try {
+      await loadPluggyScript()
+      const res = await fetch('/api/pluggy/token')
+      const { token, error } = await res.json()
+      if (error) throw new Error(error)
+
+      new window.PluggyConnect({
+        connectToken: token,
+        onSuccess: async ({ item }: any) => {
+          await supabase.from('configuracoes').upsert(
+            [{ chave: 'pluggy_nubank_item_id', valor: item.id, updated_at: new Date().toISOString() }],
+            { onConflict: 'chave' }
+          )
+          setConfig(c => ({ ...c, pluggy_nubank_item_id: item.id }))
+          setPluggyStatus('ok')
+          setPluggyMsg('✅ Nubank conectado com sucesso!')
+        },
+        onError: (err: any) => {
+          setPluggyStatus('error')
+          setPluggyMsg(`❌ Erro: ${err?.message || 'Tente novamente'}`)
+        },
+        onClose: () => { if (pluggyStatus === 'loading') setPluggyStatus('idle') },
+      }).init()
+    } catch (err: any) {
+      setPluggyStatus('error')
+      setPluggyMsg(`❌ ${err.message}`)
+    }
+  }
+
+  async function desconectarPluggy() {
+    await supabase.from('configuracoes').delete().eq('chave', 'pluggy_nubank_item_id')
+    setConfig(c => { const n = { ...c }; delete n.pluggy_nubank_item_id; return n })
+    setPluggyStatus('idle'); setPluggyMsg('')
   }
 
   async function salvar(e: React.FormEvent) {
@@ -238,6 +292,42 @@ export default function Configuracoes() {
                 <p style={{ fontSize: '13px', color: '#9ca3af', margin: '4px 0 0' }}>Receita alvo por mês</p>
               </div>
             )}
+
+            {/* Nubank via Pluggy */}
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+              <h3 style={{ fontWeight: 700, fontSize: '15px', color: '#111827', marginTop: 0, marginBottom: '6px' }}>🟣 Nubank — Open Finance</h3>
+              <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: 0, marginBottom: '16px', lineHeight: 1.5 }}>
+                Conexão oficial via Open Finance BR (Pluggy).<br/>
+                <strong style={{ color: '#7c3aed' }}>Somente leitura</strong> — nunca faz transferências, compras ou solicita cartão.
+              </p>
+
+              {config.pluggy_nubank_item_id ? (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', background: '#f0fdf4', borderRadius: '8px', marginBottom: '12px', border: '1px solid #bbf7d0' }}>
+                    <span style={{ fontSize: '18px' }}>✅</span>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#15803d' }}>Nubank conectado</div>
+                      <div style={{ fontSize: '11px', color: '#6b7280' }}>ID: {config.pluggy_nubank_item_id.slice(0, 16)}...</div>
+                    </div>
+                  </div>
+                  <button onClick={desconectarPluggy}
+                    style={{ padding: '8px 16px', background: 'transparent', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '13px', cursor: 'pointer', fontWeight: 600 }}>
+                    🔌 Desconectar
+                  </button>
+                </div>
+              ) : (
+                <button onClick={conectarPluggy} disabled={pluggyStatus === 'loading'}
+                  style={{ width: '100%', padding: '11px', background: pluggyStatus === 'loading' ? '#ede9fe' : '#7c3aed', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: pluggyStatus === 'loading' ? 'not-allowed' : 'pointer' }}>
+                  {pluggyStatus === 'loading' ? '⏳ Abrindo conexão...' : '🔗 Conectar Nubank'}
+                </button>
+              )}
+
+              {pluggyMsg && (
+                <div style={{ marginTop: '12px', padding: '10px 14px', background: pluggyStatus === 'ok' ? '#f0fdf4' : '#fef2f2', borderRadius: '8px', fontSize: '13px', color: pluggyStatus === 'ok' ? '#15803d' : '#dc2626', fontWeight: 600 }}>
+                  {pluggyMsg}
+                </div>
+              )}
+            </div>
 
             {/* Integrações */}
             <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>

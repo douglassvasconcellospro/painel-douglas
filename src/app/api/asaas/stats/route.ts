@@ -1,29 +1,8 @@
 import { NextResponse } from 'next/server'
+import { asaasGet, asaasGetAll } from '@/lib/asaas'
 
-const BASE = 'https://www.asaas.com/api/v3'
-const KEY = process.env.ASAAS_API_KEY || ''
-const h = { 'access_token': KEY, 'accept': 'application/json' }
-
-async function get(path: string) {
-  const res = await fetch(`${BASE}${path}`, { headers: h, next: { revalidate: 0 } })
-  if (!res.ok) return null
-  return res.json()
-}
-
-// Busca todos os registros paginando
-async function getAll(path: string, limit = 100) {
-  const items: any[] = []
-  let offset = 0
-  while (true) {
-    const sep = path.includes('?') ? '&' : '?'
-    const d = await get(`${path}${sep}limit=${limit}&offset=${offset}`)
-    if (!d?.data?.length) break
-    items.push(...d.data)
-    if (!d.hasMore) break
-    offset += limit
-  }
-  return items
-}
+const get    = asaasGet
+const getAll = asaasGetAll
 
 export async function GET() {
   if (!KEY) return NextResponse.json({ error: 'Chave não configurada' }, { status: 500 })

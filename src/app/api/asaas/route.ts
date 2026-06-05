@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-
-const ASAAS_BASE = 'https://www.asaas.com/api/v3'
-const ASAAS_KEY = process.env.ASAAS_API_KEY || ''
+import { asaasGet } from '@/lib/asaas'
 
 async function getSupabase() {
   const cookieStore = await cookies()
@@ -59,22 +57,13 @@ async function fetchTransacoes(dataInicio: string, dataFim: string) {
   const transacoes: any[] = []
   let offset = 0
   const limit = 100
-
   while (true) {
-    const url = `${ASAAS_BASE}/financialTransactions?limit=${limit}&offset=${offset}&startDate=${dataInicio}&finishDate=${dataFim}`
-    const res = await fetch(url, {
-      headers: { 'access_token': ASAAS_KEY, 'accept': 'application/json' },
-      next: { revalidate: 0 }
-    })
-
-    if (!res.ok) break
-    const data = await res.json()
-    transacoes.push(...(data.data || []))
-
-    if (!data.hasMore) break
+    const d = await asaasGet(`/financialTransactions?limit=${limit}&offset=${offset}&startDate=${dataInicio}&finishDate=${dataFim}`)
+    if (!d) break
+    transacoes.push(...(d.data || []))
+    if (!d.hasMore) break
     offset += limit
   }
-
   return transacoes
 }
 
@@ -151,18 +140,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET: testar conexão e retornar saldo
+// GET: testar conexão
 export async function GET() {
   try {
-    const res = await fetch(`${ASAAS_BASE}/financialTransactions?limit=1`, {
-      headers: { 'access_token': ASAAS_KEY },
-      next: { revalidate: 0 }
-    })
-    const data = await res.json()
-    return NextResponse.json({
-      conectado: res.ok,
-      totalTransacoes: data.totalCount || 0,
-    })
+    const data = await asaasGet('/financialTransactions?limit=1')
+    return NextResponse.json({ conectado: !!data, totalTransacoes: data?.totalCount || 0 })
   } catch {
     return NextResponse.json({ conectado: false })
   }

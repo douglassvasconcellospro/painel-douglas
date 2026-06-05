@@ -1,26 +1,24 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-
-const BASE = 'https://www.asaas.com/api/v3'
-const KEY = process.env.ASAAS_API_KEY || ''
+import { asaasGet } from '@/lib/asaas'
 
 export async function POST() {
-  if (!KEY) return NextResponse.json({ error: 'Chave não configurada' }, { status: 500 })
-
   try {
     // Busca em paralelo: clientes, assinaturas ativas, cobranças pendentes e cobranças vencidas
-    const [clientesRes, subscricoesRes, pendenteRes, vencidaRes] = await Promise.all([
-      fetch(`${BASE}/customers?limit=100`,                            { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
-      fetch(`${BASE}/subscriptions?status=ACTIVE&limit=100`,          { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
-      fetch(`${BASE}/payments?status=PENDING&limit=100`,              { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
-      fetch(`${BASE}/payments?status=OVERDUE&limit=100`,              { headers: { 'access_token': KEY }, next: { revalidate: 0 } }),
+    const [clientesData, subscricoesData, pendenteData, vencidaData] = await Promise.all([
+      asaasGet('/customers?limit=100'),
+      asaasGet('/subscriptions?status=ACTIVE&limit=100'),
+      asaasGet('/payments?status=PENDING&limit=100'),
+      asaasGet('/payments?status=OVERDUE&limit=100'),
     ])
 
-    const clientesAsaas        = (await clientesRes.json()).data || []
-    const subscricoesAtivas    = (await subscricoesRes.json()).data || []
-    const pagamentosPendentes  = (await pendenteRes.json()).data  || []
-    const pagamentosVencidos   = (await vencidaRes.json()).data   || []
+    if (!clientesData) return NextResponse.json({ error: 'Chave não configurada ou erro Asaas' }, { status: 500 })
+
+    const clientesAsaas        = clientesData.data       || []
+    const subscricoesAtivas    = subscricoesData?.data   || []
+    const pagamentosPendentes  = pendenteData?.data      || []
+    const pagamentosVencidos   = vencidaData?.data       || []
 
     // Ativo = assinatura recorrente ACTIVE
     //       OU cobrança/link PENDING (aguardando pagamento)

@@ -19,8 +19,9 @@ export default function Dashboard() {
   const [clientes, setClientes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [config, setConfig] = useState<Record<string, string>>({})
-  const [asaas, setAsaas] = useState<any>(null)
+  const [asaas, setAsaas]               = useState<any>(null)
   const [asaasLoading, setAsaasLoading] = useState(true)
+  const [pluggy, setPluggy]             = useState<any>(null)
 
   useEffect(() => {
     async function load() {
@@ -36,6 +37,15 @@ export default function Dashboard() {
       for (const c of (cfgs || [])) map[c.chave] = c.valor || ''
       setConfig(map)
       setLoading(false)
+
+      // Se Nubank conectado via Pluggy, busca saldo automático
+      const itemId = map.pluggy_nubank_item_id
+      if (itemId) {
+        try {
+          const pr = await fetch(`/api/pluggy/accounts?itemId=${itemId}`)
+          if (pr.ok) setPluggy(await pr.json())
+        } catch {}
+      }
     }
     load()
   }, [])
@@ -95,9 +105,11 @@ export default function Dashboard() {
   const pizzaData = Object.entries(catSaida).sort((a,b) => b[1]-a[1]).slice(0,6).map(([name, value]) => ({ name, value }))
 
   // Saldos e limites
-  const saldoNubank = parseFloat(config.saldo_nubank || '0')
+  // Se Nubank conectado via Pluggy usa saldo automático, senão usa o manual
+  const saldoNubank  = pluggy?.saldoTotal ?? parseFloat(config.saldo_nubank || '0')
+  const nubankAuto   = !!pluggy?.saldoTotal
   const limiteNubank = parseFloat(config.limite_cartao_nubank || '0')
-  const saldoAsaas = asaas?.saldo ?? 0
+  const saldoAsaas   = asaas?.saldo ?? 0
 
   return (
     <div style={{ maxWidth: '1400px' }}>
@@ -126,7 +138,9 @@ export default function Dashboard() {
         <div style={{ background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', borderRadius: '14px', padding: '18px', color: '#fff' }}>
           <div style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, marginBottom: '6px' }}>🟣 SALDO NUBANK</div>
           <div style={{ fontSize: '26px', fontWeight: 800 }}>{fmt(saldoNubank)}</div>
-          <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px' }}>Atualizado em Config.</div>
+          <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px' }}>
+            {nubankAuto ? '🔗 Open Finance (automático)' : 'Atualizado em Config.'}
+          </div>
         </div>
         {/* Limite Cartão */}
         <div style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)', borderRadius: '14px', padding: '18px', color: '#fff' }}>
