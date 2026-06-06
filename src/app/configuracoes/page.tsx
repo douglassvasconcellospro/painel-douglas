@@ -2,27 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-declare global { interface Window { PluggyConnect: any } }
-
-function loadPluggyScript(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // Adiciona o script se ainda não existe
-    if (!document.getElementById('pluggy-sdk')) {
-      const s = document.createElement('script')
-      s.id  = 'pluggy-sdk'
-      s.src = 'https://cdn.pluggy.ai/pluggy-connect/v2/pluggy-connect.js'
-      s.onerror = () => reject(new Error('Falha ao carregar Pluggy'))
-      document.head.appendChild(s)
-    }
-    // Polling até o global estar disponível (até 10s)
-    let attempts = 0
-    const check = setInterval(() => {
-      attempts++
-      if (window.PluggyConnect) { clearInterval(check); resolve() }
-      else if (attempts > 100) { clearInterval(check); reject(new Error('PluggyConnect não disponível')) }
-    }, 100)
-  })
-}
+import { PluggyConnect } from 'pluggy-connect-sdk'
 
 type Config = Record<string, string>
 
@@ -111,12 +91,12 @@ export default function Configuracoes() {
   async function conectarPluggy() {
     setPluggyStatus('loading'); setPluggyMsg('')
     try {
-      await loadPluggyScript()
+      const { PluggyConnect } = await import('pluggy-connect-sdk')
       const res = await fetch('/api/pluggy/token')
       const { token, error } = await res.json()
       if (error) throw new Error(error)
 
-      new window.PluggyConnect({
+      new PluggyConnect({
         connectToken: token,
         onSuccess: async ({ item }: any) => {
           await supabase.from('configuracoes').upsert(

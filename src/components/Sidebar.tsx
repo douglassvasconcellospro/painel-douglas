@@ -4,8 +4,10 @@ import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 const nav = [
-  { href: '/dashboard',    label: 'Dashboard',        icon: '📊' },
-  { href: '/lancamentos',  label: 'Lançamentos',       icon: '↕️' },
+  { href: '/dashboard',    label: 'Dashboard',         icon: '📊' },
+  { href: '/nubank',       label: 'Nubank (Pessoal)',  icon: '🟣', dividerBefore: true },
+  { href: '/asaas',        label: 'Asaas (Empresa)',   icon: '🟢' },
+  { href: '/lancamentos',  label: 'Lançamentos',       icon: '↕️', dividerBefore: true },
   { href: '/importar',     label: 'Importar Extrato',  icon: '📥' },
   { href: '/clientes',     label: 'Clientes & Leads',  icon: '👥' },
   { href: '/fechamentos',  label: 'Fechamentos',       icon: '📅' },
@@ -72,28 +74,32 @@ export default function Sidebar() {
         {nav.map(item => {
           const active = path === item.href
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                fontWeight: 500,
-                marginBottom: '2px',
-                textDecoration: 'none',
-                color: active ? '#fff' : '#9ca3af',
-                background: active ? '#4f46e5' : 'transparent',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-              }}
-            >
-              <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.icon}</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
-            </Link>
+            <div key={item.href}>
+              {item.dividerBefore && (
+                <div style={{ height: '1px', background: '#1f2937', margin: '8px 4px' }} />
+              )}
+              <Link
+                href={item.href}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  marginBottom: '2px',
+                  textDecoration: 'none',
+                  color: active ? '#fff' : '#9ca3af',
+                  background: active ? '#4f46e5' : 'transparent',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                }}
+              >
+                <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.icon}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+              </Link>
+            </div>
           )
         })}
       </nav>
