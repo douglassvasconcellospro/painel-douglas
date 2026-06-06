@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
@@ -73,6 +73,12 @@ function parseOFX(texto: string) {
   return transacoes
 }
 
+const MESES_LABEL: Record<string, string> = {
+  '2026-06': 'Jun 2026', '2026-05': 'Mai 2026', '2026-04': 'Abr 2026',
+  '2026-03': 'Mar 2026', '2026-02': 'Fev 2026', '2026-01': 'Jan 2026',
+  '2025-12': 'Dez 2025', '2025-11': 'Nov 2025', '2025-10': 'Out 2025',
+}
+
 export default function Importar() {
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [banco, setBanco] = useState('nubank')
@@ -82,6 +88,14 @@ export default function Importar() {
   const [resultado, setResultado] = useState<any>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Resumo de dados importados
+  const [resumo, setResumo] = useState<{ mes: string; banco: string; qtd: number }[]>([])
+  const [resumoLoading, setResumoLoading] = useState(true)
+
+  // Limpar por mês
+  const [limparBanco, setLimparBanco] = useState('nubank')
+  const [limparMes, setLimparMes] = useState('')
+
   // Sync Asaas
   const hoje = new Date().toISOString().slice(0, 10)
   const primeiroDiaMes = new Date().toISOString().slice(0, 8) + '01'
@@ -90,11 +104,51 @@ export default function Importar() {
   const [syncLoading, setSyncLoading] = useState(false)
   const [syncResult, setSyncResult] = useState<any>(null)
 
+  async function carregarResumo() {
+    setResumoLoading(true)
+    const { data } = await supabase
+      .from('lancamentos')
+      .select('mes, banco')
+      .order('mes', { ascending: false })
+    if (data) {
+      const map: Record<string, number> = {}
+      data.forEach(l => {
+        const key = `${l.mes}|${l.banco}`
+        map[key] = (map[key] || 0) + 1
+      })
+      setResumo(Object.entries(map).map(([key, qtd]) => {
+        const [mes, banco] = key.split('|')
+        return { mes, banco, qtd }
+      }).sort((a, b) => b.mes.localeCompare(a.mes) || a.banco.localeCompare(b.banco)))
+    }
+    setResumoLoading(false)
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { carregarResumo() }, [])
+
+  async function limparPorMes() {
+    if (!limparMes) { alert('Selecione o mês antes de limpar.'); return }
+    const bancoNome = limparBanco === 'nubank' ? 'Nubank' : 'Asaas'
+    const mesLabel = MESES_LABEL[limparMes] || limparMes
+    if (!confirm(`Apagar lançamentos do ${bancoNome} de ${mesLabel}? Isso não pode ser desfeito.`)) return
+    setLimpando(true); setLimpouMsg('')
+    try {
+      const { error } = await supabase.from('lancamentos').delete().eq('banco', bancoNome).eq('mes', limparMes)
+      if (error) throw error
+      setLimpouMsg(`✅ ${bancoNome} — ${mesLabel} apagado! Agora reimporte o extrato desse mês.`)
+      carregarResumo()
+    } catch (e: any) {
+      setLimpouMsg(`❌ Erro: ${e.message}`)
+    }
+    setLimpando(false)
+  }
+
   async function limparLancamentos(filtro: 'tudo' | 'nubank' | 'asaas') {
     const msgs: Record<string, string> = {
-      tudo:   'APAGAR TODOS os lançamentos? Isso não pode ser desfeito.',
-      nubank: 'Apagar todos os lançamentos do Nubank?',
-      asaas:  'Apagar todos os lançamentos do Asaas?',
+      tudo:   'APAGAR TODOS os lançamentos de todos os meses? Isso não pode ser desfeito.',
+      nubank: 'Apagar TODOS os lançamentos do Nubank (todos os meses)?',
+      asaas:  'Apagar TODOS os lançamentos do Asaas (todos os meses)?',
     }
     if (!confirm(msgs[filtro])) return
     setLimpando(true); setLimpouMsg('')
@@ -104,7 +158,8 @@ export default function Importar() {
       if (filtro === 'asaas')  query = supabase.from('lancamentos').delete().eq('banco', 'Asaas')
       const { error } = await query
       if (error) throw error
-      setLimpouMsg(`✅ Lançamentos ${filtro === 'tudo' ? 'apagados' : `do ${filtro === 'nubank' ? 'Nubank' : 'Asaas'} apagados`} com sucesso! Agora reimporte o extrato.`)
+      setLimpouMsg(`✅ ${filtro === 'tudo' ? 'Tudo' : filtro === 'nubank' ? 'Nubank' : 'Asaas'} apagado! Reimporte os extratos.`)
+      carregarResumo()
     } catch (e: any) {
       setLimpouMsg(`❌ Erro: ${e.message}`)
     }
@@ -203,6 +258,7 @@ export default function Importar() {
         totSaidas: saidas.reduce((s, t) => s + t.valor, 0),
         cats: [...new Set(novos.map(t => t.categoria))]
       })
+      carregarResumo()
     } catch (e: any) {
       alert('Erro: ' + e.message)
     }
@@ -263,29 +319,81 @@ export default function Importar() {
         )}
       </div>
 
-      {/* Card zona de perigo — limpar lançamentos */}
+      {/* Painel de dados importados por mês */}
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', padding: '20px 24px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+          <span style={{ fontSize: '18px' }}>📅</span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '15px', color: '#111827' }}>Dados importados por mês</div>
+            <div style={{ fontSize: '12px', color: '#9ca3af' }}>O que já está salvo — reimportar o mesmo mês não duplica (deduplicação automática)</div>
+          </div>
+        </div>
+        {resumoLoading ? (
+          <div style={{ fontSize: '13px', color: '#9ca3af' }}>Carregando...</div>
+        ) : resumo.length === 0 ? (
+          <div style={{ fontSize: '13px', color: '#9ca3af' }}>Nenhum dado importado ainda.</div>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {resumo.map((r, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', background: r.banco === 'Nubank' ? '#faf5ff' : '#f0fdf4', border: `1px solid ${r.banco === 'Nubank' ? '#e9d5ff' : '#bbf7d0'}`, borderRadius: '99px', fontSize: '12px', fontWeight: 600 }}>
+                <span>{r.banco === 'Nubank' ? '🟣' : '🟢'}</span>
+                <span style={{ color: '#374151' }}>{MESES_LABEL[r.mes] || r.mes}</span>
+                <span style={{ color: '#9ca3af', fontWeight: 400 }}>{r.qtd} registros</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Card zona de perigo — limpar por mês */}
       <div style={{ background: '#fff', border: '1.5px solid #fecaca', borderRadius: '16px', padding: '20px 24px', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
           <span style={{ fontSize: '20px' }}>🗑️</span>
           <div>
             <div style={{ fontWeight: 700, fontSize: '15px', color: '#dc2626' }}>Limpar Lançamentos</div>
-            <div style={{ fontSize: '12px', color: '#9ca3af' }}>Use para remover duplicatas antes de reimportar. Ação irreversível.</div>
+            <div style={{ fontSize: '12px', color: '#9ca3af' }}>Use para corrigir duplicatas. Prefira "Por Mês" para ser mais preciso. Ação irreversível.</div>
           </div>
         </div>
+
+        {/* Limpar por mês — recomendado */}
+        <div style={{ background: '#fef9c3', border: '1px solid #fde68a', borderRadius: '10px', padding: '14px', marginBottom: '12px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 700, color: '#92400e', marginBottom: '10px' }}>⭐ Recomendado — Limpar por mês</div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <select value={limparBanco} onChange={e => setLimparBanco(e.target.value)}
+              style={{ padding: '8px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', background: '#fff' }}>
+              <option value="nubank">🟣 Nubank</option>
+              <option value="asaas">🟢 Asaas</option>
+            </select>
+            <select value={limparMes} onChange={e => setLimparMes(e.target.value)}
+              style={{ padding: '8px 12px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', background: '#fff' }}>
+              <option value="">Selecione o mês...</option>
+              {Object.entries(MESES_LABEL).map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+            <button onClick={limparPorMes} disabled={limpando || !limparMes}
+              style={{ padding: '8px 18px', background: (!limparMes || limpando) ? '#fde68a' : '#d97706', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: (!limparMes || limpando) ? 'not-allowed' : 'pointer' }}>
+              {limpando ? '⏳ Limpando...' : '🗑️ Limpar este mês'}
+            </button>
+          </div>
+        </div>
+
+        {/* Limpar tudo — nuclear */}
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button onClick={() => limparLancamentos('nubank')} disabled={limpando}
-            style={{ padding: '8px 16px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '13px', fontWeight: 600, cursor: limpando ? 'not-allowed' : 'pointer' }}>
-            🟣 Limpar Nubank
+            style={{ padding: '8px 16px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '12px', fontWeight: 600, cursor: limpando ? 'not-allowed' : 'pointer' }}>
+            🟣 Apagar todo Nubank
           </button>
           <button onClick={() => limparLancamentos('asaas')} disabled={limpando}
-            style={{ padding: '8px 16px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '13px', fontWeight: 600, cursor: limpando ? 'not-allowed' : 'pointer' }}>
-            🟢 Limpar Asaas
+            style={{ padding: '8px 16px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '12px', fontWeight: 600, cursor: limpando ? 'not-allowed' : 'pointer' }}>
+            🟢 Apagar todo Asaas
           </button>
           <button onClick={() => limparLancamentos('tudo')} disabled={limpando}
-            style={{ padding: '8px 16px', background: '#dc2626', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: limpando ? 'not-allowed' : 'pointer' }}>
-            {limpando ? '⏳ Limpando...' : '⚠️ Limpar Tudo'}
+            style={{ padding: '8px 16px', background: '#dc2626', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: limpando ? 'not-allowed' : 'pointer' }}>
+            ⚠️ Apagar Tudo
           </button>
         </div>
+
         {limpouMsg && (
           <div style={{ marginTop: '12px', padding: '10px 14px', background: limpouMsg.startsWith('✅') ? '#f0fdf4' : '#fef2f2', borderRadius: '8px', fontSize: '13px', fontWeight: 600, color: limpouMsg.startsWith('✅') ? '#15803d' : '#dc2626' }}>
             {limpouMsg}
