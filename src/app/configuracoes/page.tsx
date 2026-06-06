@@ -7,11 +7,12 @@ import { PluggyConnect } from 'pluggy-connect-sdk'
 type Config = Record<string, string>
 
 const CAMPOS = [
-  { key: 'nome_admin',  label: 'Nome completo',             type: 'text',   placeholder: 'Seu nome' },
-  { key: 'email_admin', label: 'Email',                      type: 'email',  placeholder: 'seu@email.com' },
-  { key: 'telefone',    label: 'Telefone / WhatsApp',        type: 'text',   placeholder: '(00) 00000-0000' },
-  { key: 'empresa',     label: 'Nome da empresa',            type: 'text',   placeholder: 'Ex: DV Finanças' },
-  { key: 'meta_mensal', label: 'Meta de receita mensal (R$)', type: 'number', placeholder: '50000' },
+  { key: 'nome_admin',  label: 'Nome completo',              type: 'text',   placeholder: 'Seu nome' },
+  { key: 'email_admin', label: 'Email',                       type: 'email',  placeholder: 'seu@email.com' },
+  { key: 'telefone',    label: 'Telefone / WhatsApp',         type: 'text',   placeholder: '(00) 00000-0000' },
+  { key: 'empresa',     label: 'Nome da empresa',             type: 'text',   placeholder: 'Ex: DV Finanças' },
+  { key: 'meta_mensal', label: '📈 Meta de Receita mensal (R$)', type: 'number', placeholder: '50000' },
+  { key: 'meta_lucro',  label: '💰 Meta de Lucro mensal (R$)',   type: 'number', placeholder: '20000' },
 ]
 
 const CAMPOS_SALDO = [

@@ -64,8 +64,10 @@ export default function Dashboard() {
   const saidas = doMes.filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0)
   const resultado = entradas - saidas
   const margem = entradas > 0 ? ((resultado / entradas) * 100) : 0
-  const meta = parseFloat(config.meta_mensal || '0')
-  const metaPct = meta > 0 ? Math.min((entradas / meta) * 100, 100) : 0
+  const meta       = parseFloat(config.meta_mensal || '0')
+  const metaPct    = meta > 0 ? Math.min((entradas / meta) * 100, 100) : 0
+  const metaLucro  = parseFloat(config.meta_lucro || '0')
+  const metaLucroPct = metaLucro > 0 ? Math.min((resultado / metaLucro) * 100, 100) : 0
 
   // Métricas profissionais
   const mesAnterior = MESES_LISTA[MESES_LISTA.findIndex(m2 => m2.v === mes) + 1]?.v
@@ -201,29 +203,65 @@ export default function Dashboard() {
 
           {/* Meta + Alertas */}
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px', marginBottom: '20px' }}>
-            {/* Meta vs Realizado */}
-            {meta > 0 && (
-              <div style={{ background: '#fff', borderRadius: '14px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827' }}>🎯 Meta vs Realizado</div>
-                    <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>{MESES_LISTA.find(m2 => m2.v === mes)?.l}</div>
+            {/* Metas */}
+            {(meta > 0 || metaLucro > 0) && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Meta de Receita */}
+                {meta > 0 && (
+                  <div style={{ background: '#fff', borderRadius: '14px', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '13px', color: '#111827' }}>📈 Meta de Receita</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '1px' }}>{MESES_LISTA.find(m2 => m2.v === mes)?.l}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: 800, fontSize: '17px', color: metaPct >= 100 ? '#16a34a' : '#f59e0b' }}>{metaPct.toFixed(0)}%</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af' }}>{fmt(entradas)} / {fmt(meta)}</div>
+                      </div>
+                    </div>
+                    <div style={{ height: '10px', background: '#f3f4f6', borderRadius: '99px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${metaPct}%`, background: metaPct >= 100 ? '#16a34a' : metaPct >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '99px', transition: 'width 0.5s' }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '11px', color: '#9ca3af' }}>
+                      <span>R$ 0</span>
+                      <span style={{ color: meta - entradas > 0 ? '#ef4444' : '#16a34a', fontWeight: 600 }}>
+                        {meta - entradas > 0 ? `Faltam ${fmt(meta - entradas)}` : `✅ +${fmt(entradas - meta)}`}
+                      </span>
+                      <span>{fmt(meta)}</span>
+                    </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 800, fontSize: '18px', color: metaPct >= 100 ? '#16a34a' : '#f59e0b' }}>{metaPct.toFixed(0)}%</div>
-                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>{fmt(entradas)} / {fmt(meta)}</div>
+                )}
+                {/* Meta de Lucro */}
+                {metaLucro > 0 && (
+                  <div style={{ background: '#fff', borderRadius: '14px', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '13px', color: '#111827' }}>💰 Meta de Lucro</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '1px' }}>Receitas − Despesas</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: 800, fontSize: '17px', color: metaLucroPct >= 100 ? '#16a34a' : resultado < 0 ? '#dc2626' : '#f59e0b' }}>
+                          {resultado < 0 ? '⚠️' : `${Math.max(0, metaLucroPct).toFixed(0)}%`}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af' }}>{fmt(resultado)} / {fmt(metaLucro)}</div>
+                      </div>
+                    </div>
+                    <div style={{ height: '10px', background: '#f3f4f6', borderRadius: '99px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.max(0, metaLucroPct)}%`, background: metaLucroPct >= 100 ? '#16a34a' : resultado < 0 ? '#dc2626' : metaLucroPct >= 70 ? '#f59e0b' : '#3b82f6', borderRadius: '99px', transition: 'width 0.5s' }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '11px', color: '#9ca3af' }}>
+                      <span>R$ 0</span>
+                      <span style={{ color: resultado >= metaLucro ? '#16a34a' : resultado < 0 ? '#dc2626' : '#f59e0b', fontWeight: 600 }}>
+                        {resultado < 0
+                          ? `Prejuízo de ${fmt(Math.abs(resultado))}`
+                          : resultado >= metaLucro
+                            ? `✅ +${fmt(resultado - metaLucro)}`
+                            : `Faltam ${fmt(metaLucro - resultado)}`}
+                      </span>
+                      <span>{fmt(metaLucro)}</span>
+                    </div>
                   </div>
-                </div>
-                <div style={{ height: '12px', background: '#f3f4f6', borderRadius: '99px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${metaPct}%`, background: metaPct >= 100 ? '#16a34a' : metaPct >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '99px', transition: 'width 0.5s' }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '12px', color: '#9ca3af' }}>
-                  <span>R$ 0</span>
-                  <span style={{ color: meta - entradas > 0 ? '#ef4444' : '#16a34a', fontWeight: 600 }}>
-                    {meta - entradas > 0 ? `Faltam ${fmt(meta - entradas)}` : `✅ Meta atingida! +${fmt(entradas - meta)}`}
-                  </span>
-                  <span>{fmt(meta)}</span>
-                </div>
+                )}
               </div>
             )}
 
@@ -238,7 +276,17 @@ export default function Dashboard() {
                 )}
                 {meta > 0 && metaPct < 70 && (
                   <div style={{ background: '#fff7ed', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#ea580c', fontWeight: 600 }}>
-                    🟠 Meta em risco — apenas {metaPct.toFixed(0)}% atingido
+                    🟠 Meta de receita em risco — {metaPct.toFixed(0)}% atingido
+                  </div>
+                )}
+                {metaLucro > 0 && resultado < 0 && (
+                  <div style={{ background: '#fef2f2', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#dc2626', fontWeight: 600 }}>
+                    🔴 Prejuízo este mês — {fmt(Math.abs(resultado))} abaixo do zero
+                  </div>
+                )}
+                {metaLucro > 0 && resultado >= 0 && metaLucroPct < 70 && (
+                  <div style={{ background: '#fff7ed', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#ea580c', fontWeight: 600 }}>
+                    🟠 Meta de lucro em risco — {metaLucroPct.toFixed(0)}% atingido
                   </div>
                 )}
                 {(asaas?.qtdPendentes ?? 0) > 0 && (
