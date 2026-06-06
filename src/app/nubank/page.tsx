@@ -13,8 +13,7 @@ const MESES = [
 ]
 const CORES = ['#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#06b6d4','#84cc16']
 
-// Assinaturas são identificadas pela categoria 'Assinaturas'
-// (definida na importação via KEYWORDS_ASSINATURA no importar/page.tsx)
+import { KEYWORDS_ASSINATURA } from '@/app/importar/page'
 
 export default function NubankPage() {
   const [lancamentos, setLancamentos]   = useState<Lancamento[]>([])
@@ -55,25 +54,33 @@ export default function NubankPage() {
   const totalSaida = saidas.reduce((s, l)  => s + Number(l.valor), 0)
   const totalEntra = entradas.reduce((s, l) => s + Number(l.valor), 0)
 
-  // Assinaturas = lançamentos com categoria 'Assinaturas' do Nubank (todos os meses)
-  const todasAssinaturas = lancamentos.filter(l =>
-    l.banco?.toLowerCase().includes('nubank') &&
-    l.categoria === 'Assinaturas' &&
-    l.tipo === 'saida'
+  // Assinaturas = categoria 'Assinaturas' OU keywords na descrição (compatível com dados antigos)
+  const todasSaidasNubank = lancamentos.filter(l =>
+    l.banco?.toLowerCase().includes('nubank') && l.tipo === 'saida'
   )
-  const assinaturaMap: Record<string, { total: number; vezes: number; ultima: string }> = {}
+  const isAssinatura = (l: any) => {
+    if (l.categoria === 'Assinaturas') return true
+    const desc = (l.descricao || '').toLowerCase()
+    return KEYWORDS_ASSINATURA.some(k => desc.includes(k))
+  }
+  const todasAssinaturas = todasSaidasNubank.filter(isAssinatura)
+
+  // Agrupa por keyword/serviço identificado
+  const assinaturaMap: Record<string, { total: number; vezes: number; ultima: string; keyword: string }> = {}
   todasAssinaturas.forEach(l => {
-    // Usa primeiras palavras da descrição como nome do serviço
-    const nome = (l.descricao || '').split(' ').slice(0, 3).join(' ').toLowerCase()
-    if (!assinaturaMap[nome]) assinaturaMap[nome] = { total: 0, vezes: 0, ultima: '' }
-    assinaturaMap[nome].total += Number(l.valor)
-    assinaturaMap[nome].vezes += 1
-    if (!assinaturaMap[nome].ultima || (l.data || '') > assinaturaMap[nome].ultima) {
-      assinaturaMap[nome].ultima = l.data || ''
+    const desc = (l.descricao || '').toLowerCase()
+    const kw = KEYWORDS_ASSINATURA.find(k => desc.includes(k)) || (l.descricao || '').split(' ')[0].toLowerCase()
+    if (!assinaturaMap[kw]) assinaturaMap[kw] = { total: 0, vezes: 0, ultima: '', keyword: kw }
+    assinaturaMap[kw].total += Number(l.valor)
+    assinaturaMap[kw].vezes += 1
+    if (!assinaturaMap[kw].ultima || (l.data || '') > assinaturaMap[kw].ultima) {
+      assinaturaMap[kw].ultima = l.data || ''
     }
   })
   const assinaturas: { nome: string; total: number; vezes: number; ultima: string }[] =
-    Object.entries(assinaturaMap).map(([nome, v]) => ({ nome, ...v })).sort((a, b) => b.total - a.total)
+    Object.entries(assinaturaMap)
+      .map(([nome, v]) => ({ nome, ...v }))
+      .sort((a, b) => b.total - a.total)
 
   // Gastos por categoria do mês
   const catMap: Record<string, number> = {}

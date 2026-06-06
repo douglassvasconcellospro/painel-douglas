@@ -4,15 +4,31 @@ import { supabase } from '@/lib/supabase'
 
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 
-const KEYWORDS_ASSINATURA = [
-  'netflix','spotify','amazon prime','prime video','amazon music',
-  'apple.com','apple/itunes','apple store','disney','hbo max','hbo',
-  'youtube premium','youtube music','deezer','adobe','notion',
-  'dropbox','microsoft','google one','icloud','canva','chatgpt',
-  'openai','github','figma','paramount','globoplay','telecine',
-  'mubi','crunchyroll','duolingo','audible','kindle unlimited',
-  'hotmart','kiwify','lastpass','1password','nordvpn','expressvpn',
-  'zoom','slack','trello','linear','loom','grammarly',
+export const KEYWORDS_ASSINATURA = [
+  // Streaming vídeo
+  'netflix','disney','hbo max','hbo','paramount','globoplay','telecine',
+  'mubi','crunchyroll','apple tv','prime video','amazon prime',
+  // Streaming música
+  'spotify','deezer','amazon music','youtube premium','youtube music','tidal',
+  // Apple / Google
+  'apple.com','apple/itunes','apple store','icloud','google one',
+  // Microsoft / Adobe / Cloud
+  'microsoft','adobe','dropbox','notion','canva','figma','loom',
+  // IA / Dev
+  'chatgpt','openai','github','cursor','copilot','claude',
+  // Fitness / Bem-estar
+  'gympass','wellhub','totalpass','smart fit','academia',
+  // Viagem / Pontos
+  'smiles','livelo','latam pass','tudoazul','tudo azul','multiplus',
+  // VPN / Segurança
+  'nordvpn','expressvpn','1password','lastpass','bitdefender',
+  // Produtividade
+  'zoom','slack','trello','linear','grammarly','evernote',
+  // Cursos / Educação
+  'hotmart','kiwify','udemy','coursera','alura','rocketseat',
+  // Outros recorrentes
+  'audible','kindle unlimited','duolingo','calm','headspace',
+  'nubank ultravioleta','ultravioleta',
 ]
 
 function categorizarNubank(memo: string, tipo: string) {
