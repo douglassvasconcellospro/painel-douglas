@@ -117,6 +117,18 @@ export default function Importar() {
   const [syncLoading, setSyncLoading] = useState(false)
   const [syncResult, setSyncResult] = useState<any>(null)
 
+  // Sync Nubank via Pluggy
+  const [pluggyInicio, setPluggyInicio] = useState(primeiroDiaMes)
+  const [pluggyFim, setPluggyFim]       = useState(hoje)
+  const [pluggyLoading, setPluggyLoading] = useState(false)
+  const [pluggyResult, setPluggyResult]   = useState<any>(null)
+  const [nubankConectado, setNubankConectado] = useState(false)
+
+  useEffect(() => {
+    supabase.from('configuracoes').select('valor').eq('chave', 'pluggy_nubank_item_id').single()
+      .then(({ data }) => setNubankConectado(!!data?.valor))
+  }, [])
+
   async function carregarResumo() {
     setResumoLoading(true)
     const { data } = await supabase
@@ -177,6 +189,24 @@ export default function Importar() {
       setLimpouMsg(`❌ Erro: ${e.message}`)
     }
     setLimpando(false)
+  }
+
+  async function sincronizarPluggy() {
+    setPluggyLoading(true); setPluggyResult(null)
+    try {
+      const res = await fetch('/api/pluggy/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dateFrom: pluggyInicio, dateTo: pluggyFim }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setPluggyResult(data)
+      carregarResumo()
+    } catch (e: any) {
+      setPluggyResult({ error: e.message })
+    }
+    setPluggyLoading(false)
   }
 
   async function sincronizarAsaas() {
@@ -328,6 +358,67 @@ export default function Importar() {
         {syncResult?.error && (
           <div style={{ marginTop: '12px', background: 'rgba(239,68,68,0.3)', borderRadius: '8px', padding: '10px 14px', fontSize: '13px' }}>
             ❌ {syncResult.error}
+          </div>
+        )}
+      </div>
+
+      {/* Card de Sincronização Automática Nubank via Pluggy */}
+      <div style={{ background: nubankConectado ? 'linear-gradient(135deg,#7c3aed,#6d28d9)' : 'linear-gradient(135deg,#9ca3af,#6b7280)', borderRadius: '16px', padding: '24px', marginBottom: '24px', color: '#fff' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <span style={{ fontSize: '24px' }}>🟣</span>
+              <h3 style={{ fontWeight: 700, fontSize: '18px', margin: 0 }}>Sincronização Automática — Nubank</h3>
+              {nubankConectado
+                ? <span style={{ background: 'rgba(255,255,255,0.25)', padding: '2px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: 600 }}>✅ CONECTADO</span>
+                : <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: 600 }}>⚠️ NÃO CONECTADO</span>
+              }
+            </div>
+            <p style={{ fontSize: '13px', opacity: 0.85, margin: 0 }}>
+              {nubankConectado
+                ? 'Busca transações direto do Nubank via Open Finance • somente leitura • sem transferências'
+                : 'Conecte o Nubank em Configurações → Open Finance para habilitar'}
+            </p>
+          </div>
+          {nubankConectado && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: '11px', opacity: 0.7, marginBottom: '3px' }}>De</div>
+                <input type="date" value={pluggyInicio} onChange={e => setPluggyInicio(e.target.value)}
+                  style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', fontSize: '13px', background: 'rgba(255,255,255,0.2)', color: '#fff', outline: 'none' }} />
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', opacity: 0.7, marginBottom: '3px' }}>Até</div>
+                <input type="date" value={pluggyFim} onChange={e => setPluggyFim(e.target.value)}
+                  style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', fontSize: '13px', background: 'rgba(255,255,255,0.2)', color: '#fff', outline: 'none' }} />
+              </div>
+              <div style={{ marginTop: '16px' }}>
+                <button onClick={sincronizarPluggy} disabled={pluggyLoading}
+                  style={{ padding: '10px 22px', background: '#fff', color: '#7c3aed', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '14px', cursor: pluggyLoading ? 'not-allowed' : 'pointer', opacity: pluggyLoading ? 0.7 : 1 }}>
+                  {pluggyLoading ? '⏳ Buscando...' : '🔄 Sincronizar'}
+                </button>
+              </div>
+            </div>
+          )}
+          {!nubankConectado && (
+            <a href="/configuracoes" style={{ padding: '10px 20px', background: '#fff', color: '#7c3aed', borderRadius: '10px', fontWeight: 700, fontSize: '13px', textDecoration: 'none' }}>
+              Conectar Nubank →
+            </a>
+          )}
+        </div>
+
+        {pluggyResult && !pluggyResult.error && (
+          <div style={{ marginTop: '16px', background: 'rgba(255,255,255,0.15)', borderRadius: '10px', padding: '14px', display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            <div><div style={{ fontSize: '11px', opacity: 0.8 }}>Importados</div><div style={{ fontSize: '22px', fontWeight: 800 }}>{pluggyResult.importados}</div></div>
+            {pluggyResult.duplicatas > 0 && <div><div style={{ fontSize: '11px', opacity: 0.8 }}>Duplicatas ignoradas</div><div style={{ fontSize: '18px', fontWeight: 700 }}>{pluggyResult.duplicatas}</div></div>}
+            <div><div style={{ fontSize: '11px', opacity: 0.8 }}>Entradas ({pluggyResult.entradas})</div><div style={{ fontSize: '16px', fontWeight: 700 }}>{new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(pluggyResult.totalEntradas)}</div></div>
+            <div><div style={{ fontSize: '11px', opacity: 0.8 }}>Saídas ({pluggyResult.saidas})</div><div style={{ fontSize: '16px', fontWeight: 700 }}>{new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(pluggyResult.totalSaidas)}</div></div>
+            <div><div style={{ fontSize: '11px', opacity: 0.8 }}>Período</div><div style={{ fontSize: '13px', fontWeight: 600 }}>{pluggyResult.periodo}</div></div>
+          </div>
+        )}
+        {pluggyResult?.error && (
+          <div style={{ marginTop: '12px', background: 'rgba(239,68,68,0.3)', borderRadius: '8px', padding: '10px 14px', fontSize: '13px' }}>
+            ❌ {pluggyResult.error}
           </div>
         )}
       </div>

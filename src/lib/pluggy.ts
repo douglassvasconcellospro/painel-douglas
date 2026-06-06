@@ -52,3 +52,25 @@ export async function getItem(itemId: string) {
   })
   return res.json()
 }
+
+// Busca transações de uma conta com paginação (somente leitura)
+export async function getTransactions(accountId: string, dateFrom?: string, dateTo?: string) {
+  const key  = await getApiKey()
+  const all: any[] = []
+  let page = 1
+  const limit = 100
+
+  while (true) {
+    let url = `${BASE}/transactions?accountId=${accountId}&page=${page}&pageSize=${limit}`
+    if (dateFrom) url += `&from=${dateFrom}`
+    if (dateTo)   url += `&to=${dateTo}`
+
+    const res  = await fetch(url, { headers: { 'x-api-key': key }, cache: 'no-store' })
+    const data = await res.json()
+    const items = data.results || data.data || []
+    all.push(...items)
+    if (items.length < limit) break
+    page++
+  }
+  return all
+}
