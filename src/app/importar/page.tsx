@@ -4,6 +4,17 @@ import { supabase } from '@/lib/supabase'
 
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 
+const KEYWORDS_ASSINATURA = [
+  'netflix','spotify','amazon prime','prime video','amazon music',
+  'apple.com','apple/itunes','apple store','disney','hbo max','hbo',
+  'youtube premium','youtube music','deezer','adobe','notion',
+  'dropbox','microsoft','google one','icloud','canva','chatgpt',
+  'openai','github','figma','paramount','globoplay','telecine',
+  'mubi','crunchyroll','duolingo','audible','kindle unlimited',
+  'hotmart','kiwify','lastpass','1password','nordvpn','expressvpn',
+  'zoom','slack','trello','linear','loom','grammarly',
+]
+
 function categorizarNubank(memo: string, tipo: string) {
   const m = memo.toLowerCase()
   if (tipo === 'CREDIT') {
@@ -11,14 +22,20 @@ function categorizarNubank(memo: string, tipo: string) {
     if (m.includes('resgate rdb')) return { cat: 'Rendimentos', tipo: 'entrada' }
     if (m.includes('asaas')) return { cat: 'Transferência Asaas', tipo: 'entrada' }
     if (m.includes('suplementos') || m.includes('nutricionais') || m.includes('farmac')) return { cat: 'Receita de Clientes', tipo: 'entrada' }
+    if (m.includes('estorno') || m.includes('reembolso') || m.includes('devolucao') || m.includes('devolução')) return { cat: 'Estorno', tipo: 'entrada' }
     return { cat: 'PIX Recebido', tipo: 'entrada' }
   } else {
     if (m.includes('aplicação rdb') || m.includes('aplicacao rdb')) return { cat: 'Investimentos', tipo: 'saida' }
     if (m.includes('empréstimo') || m.includes('emprestimo')) return { cat: 'Empréstimo', tipo: 'saida' }
-    if (m.includes('pagamento de fatura')) return { cat: 'Fatura do Cartão', tipo: 'saida' }
+    if (m.includes('pagamento de fatura') || m.includes('pgto fatura')) return { cat: 'Fatura do Cartão', tipo: 'saida' }
+    if (KEYWORDS_ASSINATURA.some(k => m.includes(k))) return { cat: 'Assinaturas', tipo: 'saida' }
+    if (m.includes('farmac') || m.includes('drogaria') || m.includes('ultrafarma')) return { cat: 'Saúde', tipo: 'saida' }
+    if (m.includes('ifood') || m.includes('rappi') || m.includes('uber eats') || m.includes('restaurante') || m.includes('lanchonete') || m.includes('padaria')) return { cat: 'Alimentação', tipo: 'saida' }
+    if (m.includes('uber') || m.includes('99app') || m.includes('taxi') || m.includes('combustivel') || m.includes('combustível')) return { cat: 'Transporte', tipo: 'saida' }
+    if (m.includes('mercado') || m.includes('supermercado') || m.includes('carrefour') || m.includes('extra') || m.includes('pão de açucar') || m.includes('atacadao') || m.includes('atacadão')) return { cat: 'Supermercado', tipo: 'saida' }
+    if (m.includes('lalamove') || m.includes('frete') || m.includes('loggi') || m.includes('correios')) return { cat: 'Logística', tipo: 'saida' }
+    if (m.includes('mercado pago') || m.includes('shopee') || m.includes('amazon')) return { cat: 'Marketplace', tipo: 'saida' }
     if (m.includes('compra no débito') || m.includes('compra no debito')) return { cat: 'Compras', tipo: 'saida' }
-    if (m.includes('lalamove') || m.includes('frete')) return { cat: 'Logística', tipo: 'saida' }
-    if (m.includes('mercado pago')) return { cat: 'Marketplace', tipo: 'saida' }
     return { cat: 'PIX Enviado', tipo: 'saida' }
   }
 }
@@ -121,20 +138,47 @@ export default function Importar() {
         }
       }
 
+      // ── DEDUPLICAÇÃO: evita importar o mesmo extrato duas vezes ──
+      let novos = transacoes
+      let duplicatas = 0
+
       if (transacoes.length > 0) {
-        const { error } = await supabase.from('lancamentos').insert(transacoes)
+        const mesesNoArquivo = [...new Set(transacoes.map(t => t.mes))]
+        const bancoNome = banco === 'nubank' ? 'Nubank' : 'Asaas'
+
+        const { data: existentes } = await supabase
+          .from('lancamentos')
+          .select('data, valor, descricao')
+          .eq('banco', bancoNome)
+          .in('mes', mesesNoArquivo)
+
+        const chaveExistente = new Set(
+          (existentes || []).map(e =>
+            `${e.data}|${Number(e.valor).toFixed(2)}|${(e.descricao || '').slice(0, 30).toLowerCase()}`
+          )
+        )
+
+        novos = transacoes.filter(t =>
+          !chaveExistente.has(`${t.data}|${Number(t.valor).toFixed(2)}|${(t.descricao || '').slice(0, 30).toLowerCase()}`)
+        )
+        duplicatas = transacoes.length - novos.length
+      }
+
+      if (novos.length > 0) {
+        const { error } = await supabase.from('lancamentos').insert(novos)
         if (error) throw error
       }
 
-      const entradas = transacoes.filter(t => t.tipo === 'entrada')
-      const saidas = transacoes.filter(t => t.tipo === 'saida')
+      const entradas = novos.filter(t => t.tipo === 'entrada')
+      const saidas = novos.filter(t => t.tipo === 'saida')
       setResultado({
-        total: transacoes.length,
+        total: novos.length,
+        duplicatas,
         entradas: entradas.length,
         saidas: saidas.length,
         totEntradas: entradas.reduce((s, t) => s + t.valor, 0),
         totSaidas: saidas.reduce((s, t) => s + t.valor, 0),
-        cats: [...new Set(transacoes.map(t => t.categoria))]
+        cats: [...new Set(novos.map(t => t.categoria))]
       })
     } catch (e: any) {
       alert('Erro: ' + e.message)
@@ -227,7 +271,19 @@ export default function Importar() {
 
           {resultado && (
             <div className="mt-5 p-4 bg-green-50 border border-green-200 rounded-xl">
-              <div className="text-green-700 font-semibold mb-3">✅ {resultado.total} lançamentos importados!</div>
+              <div className="text-green-700 font-semibold mb-1">
+                ✅ {resultado.total} lançamentos novos importados!
+              </div>
+              {resultado.duplicatas > 0 && (
+                <div className="text-amber-600 text-sm font-medium mb-3">
+                  ⚠️ {resultado.duplicatas} duplicata{resultado.duplicatas > 1 ? 's' : ''} ignorada{resultado.duplicatas > 1 ? 's' : ''} — já existiam no banco
+                </div>
+              )}
+              {resultado.total === 0 && resultado.duplicatas > 0 && (
+                <div className="text-amber-700 text-sm font-medium mb-3">
+                  Este extrato já foi importado antes. Nada foi adicionado.
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-white rounded-lg p-3">
                   <div className="text-xs text-gray-500">Entradas ({resultado.entradas})</div>
@@ -238,9 +294,11 @@ export default function Importar() {
                   <div className="text-red-600 font-bold">{fmt(resultado.totSaidas)}</div>
                 </div>
               </div>
-              <div className="mt-3 text-xs text-gray-500">
-                Categorias: {resultado.cats.join(', ')}
-              </div>
+              {resultado.cats.length > 0 && (
+                <div className="mt-3 text-xs text-gray-500">
+                  Categorias: {resultado.cats.join(', ')}
+                </div>
+              )}
             </div>
           )}
         </div>
