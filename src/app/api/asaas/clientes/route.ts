@@ -86,8 +86,9 @@ export async function POST() {
       const existente = (existentes || []).find((e: any) =>
         e.email?.toLowerCase() === emailLower || e.nome?.toLowerCase() === nomeLower
       )
-      if (existente && (existente.status !== novoStatus || existente.origem !== 'asaas')) {
-        await supabase.from('clientes').update({ status: novoStatus, origem: 'asaas' }).eq('id', existente.id)
+      // Só atualiza se for origem 'asaas' — origem 'manual' = editado pelo usuário, não mexer
+      if (existente && existente.origem === 'asaas' && existente.status !== novoStatus) {
+        await supabase.from('clientes').update({ status: novoStatus }).eq('id', existente.id)
       }
     }
 

@@ -460,23 +460,21 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Consolidado final */}
-          <div style={{ background: 'linear-gradient(135deg,#1e1b4b,#312e81)', borderRadius: '16px', padding: '24px', color: '#fff' }}>
-            <h3 style={{ fontWeight: 700, fontSize: '15px', margin: '0 0 16px', color: '#e0e7ff' }}>📊 Consolidado Geral — {MESES_LISTA.find(m2 => m2.v === mes)?.l}</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '12px' }}>
-              {[
-                { l: 'Entradas', v: fmt(entradas), c: '#4ade80' },
-                { l: 'Saídas', v: fmt(saidas), c: '#f87171' },
-                { l: 'Resultado', v: fmt(resultado), c: resultado >= 0 ? '#60a5fa' : '#f87171' },
-                { l: 'Margem', v: `${margem.toFixed(1)}%`, c: margem >= 20 ? '#4ade80' : margem >= 0 ? '#fbbf24' : '#f87171' },
-                { l: 'MRR', v: asaasLoading ? '...' : fmt(asaas?.mrr ?? 0), c: '#c4b5fd' },
-              ].map((item, i) => (
-                <div key={i} style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '12px', padding: '14px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>{item.l}</div>
-                  <div style={{ fontSize: '16px', fontWeight: 800, color: item.c }}>{item.v}</div>
-                </div>
-              ))}
-            </div>
+          {/* Resumo compacto final — substitui o Consolidado redundante */}
+          <div style={{ background: '#f9fafb', borderRadius: '12px', padding: '14px 20px', border: '1px solid #e5e7eb', display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>📊 {MESES_LISTA.find(m2 => m2.v === mes)?.l}</span>
+            {[
+              { l: 'Entradas', v: fmt(entradas), c: '#16a34a' },
+              { l: 'Saídas', v: fmt(saidas), c: '#dc2626' },
+              { l: 'Resultado', v: fmt(resultado), c: resultado >= 0 ? '#2563eb' : '#dc2626' },
+              { l: 'Margem', v: `${margem.toFixed(1)}%`, c: margem >= 20 ? '#16a34a' : margem >= 0 ? '#f59e0b' : '#dc2626' },
+              { l: 'MRR', v: asaasLoading ? '...' : fmt(asaas?.mrr ?? 0), c: '#7c3aed' },
+            ].map((item, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ fontSize: '10px', color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase' }}>{item.l}</span>
+                <span style={{ fontSize: '15px', fontWeight: 800, color: item.c }}>{item.v}</span>
+              </div>
+            ))}
           </div>
         </>
       )}

@@ -49,7 +49,7 @@ export default function Lancamentos() {
       mes: form.mes, valor: parseFloat(form.valor), banco: form.banco
     }])
     setShowModal(false)
-    setForm({ tipo: 'entrada', descricao: '', categoria: '', data: '', mes: '2026-05', valor: '', banco: 'Manual' })
+    setForm({ tipo: 'entrada', descricao: '', categoria: '', data: '', mes: MES_ATUAL, valor: '', banco: 'Manual' })
     load()
   }
 
@@ -63,6 +63,11 @@ export default function Lancamentos() {
   const catsDoTipo = categorias.filter(c => c.tipo === form.tipo).map(c => c.nome)
   const todasCats = [...new Set(categorias.map(c => c.nome))]
 
+  // Totalizadores dos filtros aplicados
+  const totalEntradas = filtrados.filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0)
+  const totalSaidas   = filtrados.filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0)
+  const resultado     = totalEntradas - totalSaidas
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -73,6 +78,30 @@ export default function Lancamentos() {
         <button onClick={() => setShowModal(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
           + Novo Lançamento
         </button>
+      </div>
+
+      {/* Card de totais do filtro atual */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '20px' }}>
+        <div style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a', borderRadius: '10px', padding: '12px 16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>↑ Entradas</div>
+          <div style={{ fontSize: '20px', fontWeight: 800, color: '#16a34a' }}>{fmt(totalEntradas)}</div>
+          <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>{filtrados.filter(l => l.tipo === 'entrada').length} registros</div>
+        </div>
+        <div style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '10px', padding: '12px 16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>↓ Saídas</div>
+          <div style={{ fontSize: '20px', fontWeight: 800, color: '#dc2626' }}>{fmt(totalSaidas)}</div>
+          <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>{filtrados.filter(l => l.tipo === 'saida').length} registros</div>
+        </div>
+        <div style={{ background: resultado >= 0 ? '#eff6ff' : '#fef2f2', borderLeft: `4px solid ${resultado >= 0 ? '#2563eb' : '#dc2626'}`, borderRadius: '10px', padding: '12px 16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>= Resultado</div>
+          <div style={{ fontSize: '20px', fontWeight: 800, color: resultado >= 0 ? '#2563eb' : '#dc2626' }}>{fmt(resultado)}</div>
+          <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>do filtro aplicado</div>
+        </div>
+        <div style={{ background: '#f9fafb', borderLeft: '4px solid #9ca3af', borderRadius: '10px', padding: '12px 16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Total</div>
+          <div style={{ fontSize: '20px', fontWeight: 800, color: '#374151' }}>{filtrados.length}</div>
+          <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>lançamentos</div>
+        </div>
       </div>
 
       {/* Filtros */}

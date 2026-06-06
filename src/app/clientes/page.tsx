@@ -188,6 +188,8 @@ export default function Clientes() {
       telefone:           form.telefone || null,
       cpf:                form.cpf || null,
       status:             form.status,
+      // Marca como 'manual' ao editar — sync do Asaas não vai sobrescrever
+      origem:             'manual',
       plano:              form.plano || null,
       valor_mensalidade:  form.valor_mensalidade ? parseFloat(form.valor_mensalidade) : null,
       data_inicio:        form.data_inicio || null,
