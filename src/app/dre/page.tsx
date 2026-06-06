@@ -1,19 +1,16 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { gerarMeses, MES_ATUAL } from '@/lib/meses'
 
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 const pct = (v: number, total: number) => total > 0 ? `${((v / total) * 100).toFixed(1)}%` : '0%'
 
-const MESES = [
-  { v: '2026-06', l: 'Junho 2026' }, { v: '2026-05', l: 'Maio 2026' },
-  { v: '2026-04', l: 'Abril 2026' }, { v: '2026-03', l: 'Março 2026' },
-  { v: '2026-02', l: 'Fevereiro 2026' }, { v: '2026-01', l: 'Janeiro 2026' },
-]
+const MESES = gerarMeses(6)
 
 export default function DRE() {
   const [lancamentos, setLancamentos] = useState<any[]>([])
-  const [mes, setMes] = useState('2026-05')
+  const [mes, setMes] = useState(MES_ATUAL)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {

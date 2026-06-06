@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase, Lancamento } from '@/lib/supabase'
+import { gerarMeses, MES_ATUAL, MESES_LABEL } from '@/lib/meses'
 
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 
@@ -10,13 +11,13 @@ export default function Lancamentos() {
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
   const [filtroTipo, setFiltroTipo] = useState('')
-  const [filtroMes, setFiltroMes] = useState('2026-05')
+  const [filtroMes, setFiltroMes] = useState(MES_ATUAL)
   const [filtroCat, setFiltroCat] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({ tipo: 'entrada', descricao: '', categoria: '', data: '', mes: '2026-05', valor: '', banco: 'Manual' })
+  const [form, setForm] = useState({ tipo: 'entrada', descricao: '', categoria: '', data: '', mes: MES_ATUAL, valor: '', banco: 'Manual' })
 
-  const meses = ['2026-05','2026-04','2026-03','2026-02','2026-01']
-  const nomeMes: Record<string,string> = {'2026-05':'Maio 2026','2026-04':'Abril 2026','2026-03':'Março 2026','2026-02':'Fevereiro 2026','2026-01':'Janeiro 2026'}
+  const meses = gerarMeses(12).map(m => m.v)
+  const nomeMes: Record<string,string> = MESES_LABEL
 
   async function load() {
     setLoading(true)

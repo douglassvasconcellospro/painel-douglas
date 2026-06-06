@@ -6,11 +6,8 @@ import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer, BarChart, Ba
 const fmt  = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 const fmtK = (v: number) => v >= 1000 ? `R$${(v/1000).toFixed(1)}k` : `R$${v.toFixed(0)}`
 
-const MESES = [
-  { v: '2026-06', l: 'Jun 2026' }, { v: '2026-05', l: 'Mai 2026' },
-  { v: '2026-04', l: 'Abr 2026' }, { v: '2026-03', l: 'Mar 2026' },
-  { v: '2026-02', l: 'Fev 2026' }, { v: '2026-01', l: 'Jan 2026' },
-]
+import { gerarMeses, MES_ATUAL } from '@/lib/meses'
+const MESES = gerarMeses(6)
 const CORES = ['#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#06b6d4','#84cc16']
 
 import { KEYWORDS_ASSINATURA } from '@/app/importar/page'
@@ -20,7 +17,7 @@ export default function NubankPage() {
   const [config, setConfig]             = useState<Record<string, string>>({})
   const [pluggy, setPluggy]             = useState<any>(null)
   const [loading, setLoading]           = useState(true)
-  const [mes, setMes]                   = useState('2026-05')
+  const [mes, setMes]                   = useState(MES_ATUAL)
 
   useEffect(() => {
     async function load() {

@@ -1,17 +1,11 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { gerarMeses } from '@/lib/meses'
 
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 
-const MESES = [
-  { v: '2026-05', l: 'Maio 2026' },
-  { v: '2026-04', l: 'Abril 2026' },
-  { v: '2026-03', l: 'Março 2026' },
-  { v: '2026-02', l: 'Fevereiro 2026' },
-  { v: '2026-01', l: 'Janeiro 2026' },
-  { v: '2025-12', l: 'Dezembro 2025' },
-]
+const MESES = gerarMeses(6)
 
 type Fechamento = {
   mes: string; mes_label: string; status: 'aberto' | 'fechado'

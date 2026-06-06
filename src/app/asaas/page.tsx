@@ -5,11 +5,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 
 const fmt  = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 const fmtK = (v: number) => v >= 1000 ? `R$${(v/1000).toFixed(1)}k` : `R$${v.toFixed(0)}`
-const MESES = [
-  { v: '2026-06', l: 'Jun 2026' }, { v: '2026-05', l: 'Mai 2026' },
-  { v: '2026-04', l: 'Abr 2026' }, { v: '2026-03', l: 'Mar 2026' },
-  { v: '2026-02', l: 'Fev 2026' }, { v: '2026-01', l: 'Jan 2026' },
-]
+import { gerarMeses, MES_ATUAL } from '@/lib/meses'
+const MESES = gerarMeses(6)
 const CORES = ['#10b981','#3b82f6','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#94a3b8']
 
 export default function AsaasPage() {
@@ -17,7 +14,7 @@ export default function AsaasPage() {
   const [statsLoading, setStatsLoading] = useState(true)
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([])
   const [loading, setLoading]         = useState(true)
-  const [mes, setMes]                 = useState('2026-05')
+  const [mes, setMes]                 = useState(MES_ATUAL)
 
   useEffect(() => {
     async function load() {
@@ -39,15 +36,15 @@ export default function AsaasPage() {
   }, [])
 
   // Lançamentos Asaas do mês
-  const asaasMes   = lancamentos.filter(l => l.banco?.toLowerCase() === 'asaas' && l.mes === mes)
+  const asaasMes   = lancamentos.filter(l => l.banco?.toLowerCase().includes('asaas') && l.mes === mes)
   const receitas   = asaasMes.filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0)
   const despesas   = asaasMes.filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0)
 
   // Evolução 6 meses (lançamentos Asaas)
   const evolucao = MESES.map(m => ({
     mes: m.l.split(' ')[0],
-    receitas: lancamentos.filter(l => l.banco?.toLowerCase() === 'asaas' && l.tipo === 'entrada' && l.mes === m.v).reduce((s, l) => s + Number(l.valor), 0),
-    despesas: lancamentos.filter(l => l.banco?.toLowerCase() === 'asaas' && l.tipo === 'saida'   && l.mes === m.v).reduce((s, l) => s + Number(l.valor), 0),
+    receitas: lancamentos.filter(l => l.banco?.toLowerCase().includes('asaas') && l.tipo === 'entrada' && l.mes === m.v).reduce((s, l) => s + Number(l.valor), 0),
+    despesas: lancamentos.filter(l => l.banco?.toLowerCase().includes('asaas') && l.tipo === 'saida'   && l.mes === m.v).reduce((s, l) => s + Number(l.valor), 0),
   })).reverse()
 
   // Gastos por categoria Asaas

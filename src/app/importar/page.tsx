@@ -89,11 +89,8 @@ function parseOFX(texto: string) {
   return transacoes
 }
 
-const MESES_LABEL: Record<string, string> = {
-  '2026-06': 'Jun 2026', '2026-05': 'Mai 2026', '2026-04': 'Abr 2026',
-  '2026-03': 'Mar 2026', '2026-02': 'Fev 2026', '2026-01': 'Jan 2026',
-  '2025-12': 'Dez 2025', '2025-11': 'Nov 2025', '2025-10': 'Out 2025',
-}
+import { gerarMeses, MESES_LABEL as _ML } from '@/lib/meses'
+const MESES_LABEL: Record<string, string> = { ..._ML, ...gerarMeses(18).reduce((acc, m) => ({ ...acc, [m.v]: m.l }), {} as Record<string,string>) }
 
 export default function Importar() {
   const [arquivo, setArquivo] = useState<File | null>(null)

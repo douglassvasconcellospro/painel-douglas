@@ -103,20 +103,36 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    // Verificar quais já existem (anti-duplicata por asaas_id)
-    // Como a tabela não tem coluna asaas_id, filtramos por data+valor+banco
-    const novos = lancamentos.filter(l => l.valor > 0) // remove valor zero
+    // Remove valores zero
+    const candidatos = lancamentos.filter(l => l.valor > 0)
+
+    const supabase = await getSupabase()
+
+    // Anti-duplicata: busca registros Asaas no mesmo período
+    const mesesNoPeriodo = [...new Set(candidatos.map(l => l.mes))]
+    const { data: existentes } = await supabase
+      .from('lancamentos')
+      .select('data, valor, descricao')
+      .eq('banco', 'Asaas')
+      .in('mes', mesesNoPeriodo)
+
+    const chaveExistente = new Set(
+      (existentes || []).map((e: any) =>
+        `${e.data}|${Number(e.valor).toFixed(2)}|${(e.descricao || '').slice(0, 30).toLowerCase()}`
+      )
+    )
+
+    const novos = candidatos.filter(l =>
+      !chaveExistente.has(`${l.data}|${Number(l.valor).toFixed(2)}|${(l.descricao || '').slice(0, 30).toLowerCase()}`)
+    )
+    const duplicatas = candidatos.length - novos.length
 
     // Salvar no Supabase (sem asaas_id pois não existe na tabela)
     const paraInserir = novos.map(({ asaas_id, ...l }) => l)
 
-    const supabase = await getSupabase()
-    const { error } = await supabase
-      .from('lancamentos')
-      .insert(paraInserir)
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (paraInserir.length > 0) {
+      const { error } = await supabase.from('lancamentos').insert(paraInserir)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     const entradas = novos.filter(l => l.tipo === 'entrada')
@@ -124,6 +140,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       importados: novos.length,
+      duplicatas,
       entradas: entradas.length,
       saidas: saidas.length,
       totalEntradas: entradas.reduce((s, l) => s + l.valor, 0),

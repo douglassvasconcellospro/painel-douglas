@@ -2,19 +2,16 @@
 import { useEffect, useState } from 'react'
 import { supabase, Lancamento } from '@/lib/supabase'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
+import { gerarMeses, MES_ATUAL } from '@/lib/meses'
 
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 const fmtK = (v: number) => v >= 1000 ? `R$${(v/1000).toFixed(1)}k` : `R$${v.toFixed(0)}`
 
-const MESES_LISTA = [
-  { v: '2026-06', l: 'Jun 2026' }, { v: '2026-05', l: 'Mai 2026' },
-  { v: '2026-04', l: 'Abr 2026' }, { v: '2026-03', l: 'Mar 2026' },
-  { v: '2026-02', l: 'Fev 2026' }, { v: '2026-01', l: 'Jan 2026' },
-]
+const MESES_LISTA = gerarMeses(6)
 const CORES_PIZZA = ['#4f46e5','#10b981','#f59e0b','#ef4444','#8b5cf6','#0ea5e9','#f97316','#94a3b8']
 
 export default function Dashboard() {
-  const [mes, setMes] = useState('2026-05')
+  const [mes, setMes] = useState(MES_ATUAL)
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([])
   const [clientes, setClientes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
