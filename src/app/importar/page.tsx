@@ -76,6 +76,8 @@ function parseOFX(texto: string) {
 export default function Importar() {
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [banco, setBanco] = useState('nubank')
+  const [limpando, setLimpando] = useState(false)
+  const [limpouMsg, setLimpouMsg] = useState('')
   const [loading, setLoading] = useState(false)
   const [resultado, setResultado] = useState<any>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -87,6 +89,27 @@ export default function Importar() {
   const [asaasFim, setAsaasFim] = useState(hoje)
   const [syncLoading, setSyncLoading] = useState(false)
   const [syncResult, setSyncResult] = useState<any>(null)
+
+  async function limparLancamentos(filtro: 'tudo' | 'nubank' | 'asaas') {
+    const msgs: Record<string, string> = {
+      tudo:   'APAGAR TODOS os lançamentos? Isso não pode ser desfeito.',
+      nubank: 'Apagar todos os lançamentos do Nubank?',
+      asaas:  'Apagar todos os lançamentos do Asaas?',
+    }
+    if (!confirm(msgs[filtro])) return
+    setLimpando(true); setLimpouMsg('')
+    try {
+      let query = supabase.from('lancamentos').delete().neq('id', 0)
+      if (filtro === 'nubank') query = supabase.from('lancamentos').delete().eq('banco', 'Nubank')
+      if (filtro === 'asaas')  query = supabase.from('lancamentos').delete().eq('banco', 'Asaas')
+      const { error } = await query
+      if (error) throw error
+      setLimpouMsg(`✅ Lançamentos ${filtro === 'tudo' ? 'apagados' : `do ${filtro === 'nubank' ? 'Nubank' : 'Asaas'} apagados`} com sucesso! Agora reimporte o extrato.`)
+    } catch (e: any) {
+      setLimpouMsg(`❌ Erro: ${e.message}`)
+    }
+    setLimpando(false)
+  }
 
   async function sincronizarAsaas() {
     setSyncLoading(true)
@@ -236,6 +259,36 @@ export default function Importar() {
         {syncResult?.error && (
           <div style={{ marginTop: '12px', background: 'rgba(239,68,68,0.3)', borderRadius: '8px', padding: '10px 14px', fontSize: '13px' }}>
             ❌ {syncResult.error}
+          </div>
+        )}
+      </div>
+
+      {/* Card zona de perigo — limpar lançamentos */}
+      <div style={{ background: '#fff', border: '1.5px solid #fecaca', borderRadius: '16px', padding: '20px 24px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+          <span style={{ fontSize: '20px' }}>🗑️</span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '15px', color: '#dc2626' }}>Limpar Lançamentos</div>
+            <div style={{ fontSize: '12px', color: '#9ca3af' }}>Use para remover duplicatas antes de reimportar. Ação irreversível.</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button onClick={() => limparLancamentos('nubank')} disabled={limpando}
+            style={{ padding: '8px 16px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '13px', fontWeight: 600, cursor: limpando ? 'not-allowed' : 'pointer' }}>
+            🟣 Limpar Nubank
+          </button>
+          <button onClick={() => limparLancamentos('asaas')} disabled={limpando}
+            style={{ padding: '8px 16px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '13px', fontWeight: 600, cursor: limpando ? 'not-allowed' : 'pointer' }}>
+            🟢 Limpar Asaas
+          </button>
+          <button onClick={() => limparLancamentos('tudo')} disabled={limpando}
+            style={{ padding: '8px 16px', background: '#dc2626', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: limpando ? 'not-allowed' : 'pointer' }}>
+            {limpando ? '⏳ Limpando...' : '⚠️ Limpar Tudo'}
+          </button>
+        </div>
+        {limpouMsg && (
+          <div style={{ marginTop: '12px', padding: '10px 14px', background: limpouMsg.startsWith('✅') ? '#f0fdf4' : '#fef2f2', borderRadius: '8px', fontSize: '13px', fontWeight: 600, color: limpouMsg.startsWith('✅') ? '#15803d' : '#dc2626' }}>
+            {limpouMsg}
           </div>
         )}
       </div>
